@@ -16,10 +16,12 @@ import {
   Radar,
   RefreshCw,
   Settings2,
+  Search,
   Smartphone,
   SquareTerminal,
   Trash2,
   Truck,
+  X,
 } from "lucide-react";
 
 import { Combobox } from "@/components/Combobox";
@@ -105,6 +107,7 @@ import {
 
 import { describeBrowserFailure, describeBrowserRecovery, describeDelivery, describeMonitorStatus, describePickupDate, type DeliveryTone } from "@/lib/monitorLog";
 import { compareNewestProducts, sortMonitorsNewestFirst } from "@/lib/productOrder";
+import { filterMonitorRows } from "@/lib/monitorFilter";
 
 const EMPTY_DELIVERY_LOCALITIES: DeliveryLocalities = {
   states: [],
@@ -464,6 +467,8 @@ export default function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [watcherBusy, setWatcherBusy] = useState(false);
+  const [monitorQuery, setMonitorQuery] = useState("");
+  const monitorSearchRef = useRef<HTMLInputElement>(null);
 
   async function connectEngine() {
     setConnecting(true);
@@ -639,6 +644,8 @@ export default function App() {
   );
 
   const sortedRows = useMemo(() => sortMonitorsNewestFirst(ui.rows), [ui.rows]);
+  const visibleRows = useMemo(() => filterMonitorRows(sortedRows, monitorQuery), [sortedRows, monitorQuery]);
+  const hasMonitorQuery = monitorQuery.trim().length > 0;
   const browserFailure = describeBrowserFailure(ui.rows);
   const browserRunningLabel = secondsUntilNextCheck !== null && secondsUntilNextCheck > 0
     ? `浏览器未连接 · 约 ${secondsUntilNextCheck} 秒后重试`
@@ -750,27 +757,27 @@ export default function App() {
     <TooltipProvider delayDuration={180}>
       <div className="app-canvas min-h-screen text-foreground">
         <main className="flex min-h-screen w-full max-w-none flex-col gap-4 overflow-x-hidden px-5 py-5 min-[900px]:h-screen min-[900px]:overflow-y-auto">
-          <header className="surface-panel flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:gap-5 sm:px-5">
+          <header className="app-toolbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-1 pt-1 pb-3 sm:gap-5">
             <div className="flex min-w-0 items-center gap-3.5">
               <div className="brand-mark" aria-hidden="true">
                 <img src="/icon.png" alt="" width={48} height={48} draggable={false} className="size-full object-contain" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate text-xl font-semibold tracking-[-0.025em]">
+                  <h1 className="truncate text-lg leading-6 font-semibold tracking-[-0.025em]">
                     库存查询器
                   </h1>
                   <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
                     v{packageInfo.version}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-xs leading-5 text-muted-foreground">
+                <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
                   Apple 直营店取货库存监控
                 </p>
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <div className="toolbar-actions flex min-w-0 flex-wrap items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -890,17 +897,17 @@ export default function App() {
             </Alert>
           )}
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38rem] min-[900px]:grid-cols-[minmax(0,1fr)_22.5rem] min-[1080px]:grid-cols-[minmax(0,1fr)_25rem] min-[1440px]:grid-cols-[minmax(0,1fr)_26.25rem]">
+          <div className={`workspace-grid grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:grid-cols-[minmax(0,1fr)_22.5rem] min-[1080px]:grid-cols-[minmax(0,1fr)_25rem] min-[1440px]:grid-cols-[minmax(0,1fr)_26.25rem] ${connectionError !== null || browserFailure !== null || ui.trouble !== null ? "min-[900px]:min-h-[34rem]" : ""}`}>
             <div className="flex min-h-0 min-w-0 flex-col gap-4">
-              <section className="surface-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
-                <div className="mb-4 flex items-center justify-between gap-3">
+              <section className="surface-panel create-monitor-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
+                <div className="create-monitor-heading mb-3 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="section-icon text-primary" aria-hidden="true">
                       <Plus className="size-4" />
                     </div>
                     <div className="min-w-0">
                       <h2 id="create-monitor-title" className="text-sm font-semibold">新建监控</h2>
-                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">选择想要追踪的门店与型号</p>
+                      <p className="create-monitor-description mt-0.5 text-xs leading-5 text-muted-foreground">选择想要追踪的门店与型号</p>
                     </div>
                   </div>
                   {hasCompleteSelection && (
@@ -910,7 +917,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 items-start gap-3 min-[540px]:grid-cols-2 min-[1600px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
+                <div className="create-monitor-fields grid grid-cols-1 items-start gap-3 min-[540px]:grid-cols-2 min-[1600px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
                   <div className="field-group">
                     <Label className="control-label">
                       <MapPin className="size-3.5" aria-hidden="true" /> 地区
@@ -1000,7 +1007,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/55 pt-3">
+                <div className="create-monitor-actions mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/55 pt-3">
                   <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground" role="status">
                     {hasCompleteSelection
                       ? `将新增 ${pendingTargets.length} 条监控${duplicateCount > 0 ? `，跳过 ${duplicateCount} 条已有组合` : ""}`
@@ -1040,20 +1047,46 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[900px]:min-h-[280px] flex-col overflow-hidden" aria-labelledby="monitor-list-title">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-4">
+              <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[900px]:min-h-0 flex-col overflow-hidden" aria-labelledby="monitor-list-title">
+                <div className="monitor-list-toolbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="section-icon" aria-hidden="true">
                       <Activity className="size-4" />
                     </div>
-                    <div>
-                      <h2 id="monitor-list-title" className="text-sm font-semibold">监控列表</h2>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">门店取货与预计送货，一处查看</p>
-                    </div>
+                    <h2 id="monitor-list-title" className="text-sm font-semibold">监控列表</h2>
+                    <span id="monitor-filter-summary" role="status" aria-live="polite" className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs tabular-nums text-muted-foreground">
+                      {hasMonitorQuery ? `${visibleRows.length} / ${ui.rows.length}` : ui.rows.length} 项
+                      {hasMonitorQuery ? <span className="sr-only">，仅筛选显示，不影响后台监控。</span> : null}
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-lg border border-primary/10 bg-primary/5 px-2.5 py-1 text-xs font-medium tabular-nums text-primary">
-                    {ui.rows.length} 项
-                  </span>
+                  {ui.rows.length > 0 || monitorQuery.length > 0 ? (
+                    <div className="relative min-w-0 basis-full min-[540px]:w-44 min-[540px]:basis-auto min-[1280px]:w-52">
+                      <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                      <Input
+                        ref={monitorSearchRef}
+                        role="searchbox"
+                        aria-label="查找监控"
+                        aria-describedby="monitor-filter-summary"
+                        placeholder="门店、型号或 SKU"
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="h-9 rounded-lg bg-background/50 pr-9 pl-9 text-xs shadow-none md:text-xs"
+                        value={monitorQuery}
+                        onChange={(event) => setMonitorQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape" && !event.nativeEvent.isComposing && monitorQuery) {
+                            event.preventDefault();
+                            setMonitorQuery("");
+                          }
+                        }}
+                      />
+                      {monitorQuery ? (
+                        <button type="button" aria-label="清除监控筛选" className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setMonitorQuery(""); monitorSearchRef.current?.focus(); }}>
+                          <X className="size-3.5" aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 {removeError ? (
@@ -1064,8 +1097,8 @@ export default function App() {
                 ) : null}
 
                 {ui.rows.length === 0 ? (
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-5 text-center" role="status">
-                    <div className="mb-3 flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/6 text-primary shadow-[0_4px_18px_-8px_var(--primary)]">
+                  <div className="monitor-empty-state flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-5 text-center" role="status">
+                    <div className="monitor-empty-icon mb-3 flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/6 text-primary shadow-[0_4px_18px_-8px_var(--primary)]">
                       <Radar className="size-6" aria-hidden="true" />
                     </div>
                     <p className="text-sm font-medium text-foreground">
@@ -1074,6 +1107,13 @@ export default function App() {
                     <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
                       {connectionError ? "请点击上方重新连接，恢复门店与型号目录。" : ui.ready ? "从上方选择门店和型号，添加后即可开始监控。" : "正在连接本地监控引擎，请稍候。"}
                     </p>
+                  </div>
+                ) : visibleRows.length === 0 ? (
+                  <div className="monitor-empty-state flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-5 text-center" role="status">
+                    <Search className="size-6 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+                    <p className="text-sm font-medium">没有匹配的监控</p>
+                    <p className="text-xs leading-5 text-muted-foreground">试试其他关键词，或清除筛选查看全部监控。</p>
+                    <Button variant="ghost" size="sm" className="h-8 text-primary" onClick={() => { setMonitorQuery(""); monitorSearchRef.current?.focus(); }}>清除筛选</Button>
                   </div>
                 ) : (
                   <>
@@ -1102,7 +1142,7 @@ export default function App() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sortedRows.map((row) => {
+                        {visibleRows.map((row) => {
                             const rowKey = targetKey(row.target);
                             const removing = removingTargetKeys.has(rowKey);
                             return (

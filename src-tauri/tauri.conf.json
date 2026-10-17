@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "库存查询器",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "identifier": "com.thomasdjmax.guotan-radar",
   "build": {
     "beforeDevCommand": "pnpm dev",

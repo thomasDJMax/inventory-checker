@@ -150,6 +150,7 @@
   }
 
   .surface-panel {
+    position: relative;
     border: 1px solid var(--border);
     border-radius: 1rem;
     background: var(--card);
@@ -183,7 +184,7 @@
   }
 
   .brand-mark {
-    @apply flex size-12 shrink-0 items-center justify-center;
+    @apply flex size-10 shrink-0 items-center justify-center;
   }
 
   .status-pill {
@@ -223,11 +224,11 @@
   }
 
   .metric-tile {
-    @apply grid min-h-[76px] min-w-0 grid-cols-[auto_1fr] items-center gap-x-1.5 px-3 py-3.5;
+    @apply grid min-h-[68px] min-w-0 grid-cols-[auto_1fr] items-center gap-x-1.5 px-3 py-3;
   }
 
   .metric-value {
-    @apply text-right text-xl font-semibold tracking-tight tabular-nums;
+    @apply text-right text-xl leading-6 font-semibold tracking-tight tabular-nums;
   }
 
   .metric-label {
@@ -246,6 +247,45 @@
     @apply shrink-0;
   }
 
+}
+
+@media (min-width: 900px) and (max-height: 720px) {
+  .create-monitor-panel {
+    padding: 12px;
+  }
+
+  .create-monitor-heading {
+    margin-bottom: 8px;
+  }
+
+  .create-monitor-description {
+    display: none;
+  }
+
+  .create-monitor-fields {
+    row-gap: 10px;
+  }
+
+  .create-monitor-actions {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .monitor-empty-state {
+    padding-block: 12px;
+  }
+
+  .monitor-empty-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 8px;
+    border-radius: 12px;
+  }
+
+  .monitor-empty-icon svg {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
