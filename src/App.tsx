@@ -752,7 +752,7 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={180}>
       <div className="app-canvas min-h-screen text-foreground">
-        <main className="flex min-h-screen w-full max-w-none flex-col gap-4 overflow-x-hidden px-5 py-5 min-[1280px]:h-screen min-[1280px]:overflow-y-auto">
+        <main className="flex min-h-screen w-full max-w-none flex-col gap-4 overflow-x-hidden px-5 py-5 min-[900px]:h-screen min-[900px]:overflow-y-auto">
           <header className="surface-panel flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:gap-5 sm:px-5">
             <div className="flex min-w-0 items-center gap-3.5">
               <div className="brand-mark" aria-hidden="true">
@@ -902,7 +902,7 @@ export default function App() {
             </Alert>
           )}
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[1280px]:min-h-[38.5rem] min-[1280px]:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38.5rem] min-[900px]:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="flex min-h-0 min-w-0 flex-col gap-4">
               <section className="surface-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
                 <div className="mb-4 flex items-start justify-between gap-4">
@@ -921,7 +921,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 items-start gap-3 min-[540px]:grid-cols-2 min-[900px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr] min-[1280px]:grid-cols-2 min-[1600px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
+                <div className="grid grid-cols-1 items-start gap-3 min-[540px]:grid-cols-2 min-[1600px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
                   <div className="field-group">
                     <Label className="control-label">
                       <MapPin className="size-3.5" aria-hidden="true" /> 地区
@@ -1052,7 +1052,7 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[1280px]:min-h-[280px] flex-col overflow-hidden" aria-labelledby="monitor-list-title">
+              <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[900px]:min-h-[280px] flex-col overflow-hidden" aria-labelledby="monitor-list-title">
                 <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3.5">
                   <div className="flex items-center gap-3">
                     <div className="section-icon" aria-hidden="true">
@@ -1173,7 +1173,7 @@ export default function App() {
             </div>
 
             <aside
-              className="workspace-sidebar flex min-h-0 flex-col gap-4 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:pr-2"
+              className="workspace-sidebar flex min-h-0 min-w-0 flex-col gap-4 min-[900px]:overflow-y-auto min-[900px]:overscroll-contain min-[900px]:pr-2"
               aria-label="监控概览、设置与活动日志"
             >
               <fieldset disabled={!ui.ready} className="contents" aria-label="监控设置与活动日志">
