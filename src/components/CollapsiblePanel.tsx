@@ -43,7 +43,7 @@ export function CollapsiblePanel({ id, icon, title, subtitle, summary, children 
       <h2 id={titleId} className="m-0">
         <button
           type="button"
-          className="flex w-full min-w-0 items-center gap-3 rounded-2xl p-5 text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`flex w-full min-w-0 items-center gap-3 rounded-2xl px-5 py-4 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${open ? "rounded-b-none border-b border-border/60" : ""}`}
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => {
@@ -53,8 +53,8 @@ export function CollapsiblePanel({ id, icon, title, subtitle, summary, children 
         >
           <span className="section-icon" aria-hidden="true">{icon}</span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="text-sm font-semibold">{title}</span>
-            <span className="mt-0.5 truncate text-xs font-normal text-muted-foreground">{open ? subtitle : summary}</span>
+            <span className="text-sm font-semibold leading-5">{title}</span>
+            <span className="mt-0.5 line-clamp-2 text-xs font-normal leading-5 text-muted-foreground">{open ? subtitle : summary}</span>
           </span>
           <ChevronDown
             className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
@@ -63,7 +63,7 @@ export function CollapsiblePanel({ id, icon, title, subtitle, summary, children 
         </button>
       </h2>
       {open ? (
-        <div id={bodyId} className="min-w-0 px-5 pb-5">
+        <div id={bodyId} className="min-w-0 px-5 pt-4 pb-5">
           {children}
         </div>
       ) : null}

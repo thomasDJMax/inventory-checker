@@ -204,11 +204,11 @@ function DeliveryBadge({ pickupDetails, lastCheckedMs }: { pickupDetails?: Picku
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className={`inline-grid min-w-24 max-w-48 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-1.5 rounded-lg border px-2 py-1.5 ${DELIVERY_CLASS[delivery.tone]}`}
+          className={`inline-grid min-w-24 max-w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-1.5 rounded-lg border px-2 py-1.5 ${DELIVERY_CLASS[delivery.tone]}`}
           aria-label={`预计送货：${delivery.detail}；${delivery.timing}`}
         >
           <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-          <span className="whitespace-nowrap text-xs font-semibold tabular-nums">{delivery.label}</span>
+          <span className="min-w-0 whitespace-normal break-words text-xs font-semibold leading-4 tabular-nums">{delivery.label}</span>
           <span className="col-start-2 whitespace-normal text-[10px] leading-3 opacity-80">{delivery.timing}</span>
         </span>
       </TooltipTrigger>
@@ -760,32 +760,26 @@ export default function App() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate text-lg font-semibold tracking-[-0.02em]">
+                  <h1 className="truncate text-xl font-semibold tracking-[-0.025em]">
                     库存查询器
                   </h1>
-                  <Badge variant="outline" className="hidden border-primary/20 bg-primary/8 text-primary sm:inline-flex">
-                    LIVE
-                  </Badge>
                   <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
                     v{packageInfo.version}
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                <p className="mt-1 truncate text-xs leading-5 text-muted-foreground">
                   Apple 直营店取货库存监控
                 </p>
               </div>
             </div>
 
-            <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 min-[1200px]:flex">
-              <span className="truncate text-sm text-muted-foreground">
-                本软件已开源，欢迎下载最新版体验
-              </span>
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon-sm"
-                    className="rounded-lg"
+                    size="icon"
+                    className="rounded-xl text-muted-foreground hover:text-foreground"
                     aria-label="在 GitHub 查看开源项目并下载最新版"
                     onClick={() => void openProjectPage()}
                   >
@@ -794,9 +788,6 @@ export default function App() {
                 </TooltipTrigger>
                 <TooltipContent>GitHub 项目与最新版下载</TooltipContent>
               </Tooltip>
-            </div>
-
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-xl" aria-label="在 GitHub 下载库存查询器更新" onClick={() => void openReleasePage()}>
@@ -902,17 +893,18 @@ export default function App() {
             </Alert>
           )}
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38.5rem] min-[900px]:grid-cols-[minmax(0,1fr)_22.5rem] min-[1080px]:grid-cols-[minmax(0,1fr)_25rem] min-[1440px]:grid-cols-[minmax(0,1fr)_26.25rem]">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38rem] min-[900px]:grid-cols-[minmax(0,1fr)_22.5rem] min-[1080px]:grid-cols-[minmax(0,1fr)_25rem] min-[1440px]:grid-cols-[minmax(0,1fr)_26.25rem]">
             <div className="flex min-h-0 min-w-0 flex-col gap-4">
               <section className="surface-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div>
-                    <div className="eyebrow">
-                      <Plus className="size-3.5" aria-hidden="true" /> 新建监控
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="section-icon text-primary" aria-hidden="true">
+                      <Plus className="size-4" />
                     </div>
-                    <h2 id="create-monitor-title" className="mt-1 text-base font-semibold tracking-tight">
-                      选择想要追踪的门店与型号
-                    </h2>
+                    <div className="min-w-0">
+                      <h2 id="create-monitor-title" className="text-sm font-semibold">新建监控</h2>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">选择想要追踪的门店与型号</p>
+                    </div>
                   </div>
                   {hasCompleteSelection && (
                     <Badge className="border-primary/20 bg-primary/10 text-primary" variant="outline">
@@ -1003,12 +995,11 @@ export default function App() {
                       selectionUnit="个型号"
                       disabled={!ui.ready || isAdding || localeChanging || productOptions.length === 0}
                     />
-                    <p className="text-[11px] leading-4 text-muted-foreground">
-                      单次查询最多包含 20 个零件号，超过后会自动分批，不会遗漏已选型号。
-                      {ui.category === "watch"
-                        ? " Watch 会先使用目录默认表带查询；也可在监控列表中按官网款式、颜色和尺码选择精确表带。"
-                        : ""}
-                    </p>
+                    {ui.category === "watch" ? (
+                      <p className="text-[11px] leading-4 text-muted-foreground">
+                        Watch 先使用默认表带查询，也可在监控列表中选择款式、颜色和尺码。
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1016,7 +1007,7 @@ export default function App() {
                   <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground" role="status">
                     {hasCompleteSelection
                       ? `将新增 ${pendingTargets.length} 条监控${duplicateCount > 0 ? `，跳过 ${duplicateCount} 条已有组合` : ""}`
-                      : localeChanging ? "正在切换地区，读取门店与型号…" : "选择门店和型号后，系统会按全部组合创建监控。"}
+                      : localeChanging ? "正在切换地区，读取门店与型号…" : "选择门店与型号，即可添加监控。"}
                   </p>
                   <div className="flex items-center gap-2">
                     <Tooltip>
@@ -1053,17 +1044,17 @@ export default function App() {
               </section>
 
               <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[900px]:min-h-[280px] flex-col overflow-hidden" aria-labelledby="monitor-list-title">
-                <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3.5">
-                  <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="section-icon" aria-hidden="true">
                       <Activity className="size-4" />
                     </div>
                     <div>
                       <h2 id="monitor-list-title" className="text-sm font-semibold">监控列表</h2>
-                      <p className="mt-0.5 text-xs text-muted-foreground">新款优先 · 取货与送货状态实时更新</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">门店取货与预计送货，一处查看</p>
                     </div>
                   </div>
-                  <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 text-xs tabular-nums text-muted-foreground">
+                  <span className="shrink-0 rounded-lg border border-primary/10 bg-primary/5 px-2.5 py-1 text-xs font-medium tabular-nums text-primary">
                     {ui.rows.length} 项
                   </span>
                 </div>
@@ -1076,9 +1067,9 @@ export default function App() {
                 ) : null}
 
                 {ui.rows.length === 0 ? (
-                  <div className="flex min-h-64 flex-1 flex-col items-center justify-center px-6 py-10 text-center" role="status">
-                    <div className="mb-3 flex size-11 items-center justify-center rounded-2xl border border-border/60 bg-muted/35 text-muted-foreground">
-                      <Radar className="size-5" aria-hidden="true" />
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-5 text-center" role="status">
+                    <div className="mb-3 flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/6 text-primary shadow-[0_4px_18px_-8px_var(--primary)]">
+                      <Radar className="size-6" aria-hidden="true" />
                     </div>
                     <p className="text-sm font-medium text-foreground">
                       {connectionError ? "监控引擎尚未连接" : ui.ready ? "还没有监控项目" : "正在载入目录…"}
@@ -1088,28 +1079,29 @@ export default function App() {
                     </p>
                   </div>
                 ) : (
-                  <ScrollArea horizontal aria-label="监控列表，可横向滚动查看全部列" className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:min-w-[960px] [&_[data-slot=table-container]]:overflow-visible">
-                    <Table className="min-w-[960px] table-fixed">
+                  <>
+                  <ScrollArea horizontal aria-label="监控列表，可横向滚动查看全部列" className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:min-w-[820px] [&_[data-slot=table-container]]:overflow-visible">
+                    <Table className="min-w-[820px] table-fixed">
                       <colgroup>
-                        <col className="w-28" />
-                        <col className="w-36" />
+                        <col className="w-[104px]" />
+                        <col className="w-[120px]" />
                         <col />
-                        <col className="w-44" />
-                        <col className="w-22" />
+                        <col className="w-[156px]" />
                         <col className="w-20" />
-                        <col className="w-12" />
+                        <col className="w-16" />
+                        <col className="w-11" />
                       </colgroup>
                       <TableHeader className="sticky top-0 z-10 bg-card/95">
                         <TableRow className="hover:bg-transparent">
-                          <TableHead className="w-36 px-4 text-xs text-muted-foreground">取货状态</TableHead>
-                          <TableHead className="w-44 px-4 text-xs text-muted-foreground">门店</TableHead>
-                          <TableHead className="px-4 text-xs text-muted-foreground">型号</TableHead>
-                          <TableHead className="w-48 px-3 text-xs text-muted-foreground">
+                          <TableHead className="px-3 text-[11px] tracking-wide text-muted-foreground">取货状态</TableHead>
+                          <TableHead className="px-3 text-[11px] tracking-wide text-muted-foreground">门店</TableHead>
+                          <TableHead className="px-3 text-[11px] tracking-wide text-muted-foreground">型号</TableHead>
+                          <TableHead className="px-2 text-[11px] tracking-wide text-muted-foreground">
                             <span className="flex items-center gap-1.5"><Truck className="size-3.5" aria-hidden="true" />预计送货</span>
                           </TableHead>
-                          <TableHead className="w-20 px-2 text-xs text-muted-foreground">最后检查</TableHead>
-                          <TableHead className="w-20 px-1 text-xs text-muted-foreground">Bark</TableHead>
-                          <TableHead className="sticky right-0 z-20 w-12 border-l border-border/40 bg-card/95" aria-label="操作" />
+                          <TableHead className="px-2 text-[11px] tracking-wide text-muted-foreground">最后检查</TableHead>
+                          <TableHead className="px-1 text-center text-[11px] tracking-wide text-muted-foreground">Bark</TableHead>
+                          <TableHead className="sticky right-0 z-20 border-l border-border/40 bg-card/95" aria-label="操作" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1117,12 +1109,12 @@ export default function App() {
                             const rowKey = targetKey(row.target);
                             const removing = removingTargetKeys.has(rowKey);
                             return (
-                              <TableRow key={rowKey} className="group hover:bg-muted/22">
-                                <TableCell className="px-4"><StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} /></TableCell>
-                                <TableCell className="truncate px-4 font-medium" title={row.target.storeTitle}>{row.target.storeTitle}</TableCell>
-                                <TableCell className="min-w-0 px-4 py-2.5 text-muted-foreground" title={row.target.productName}>
+                              <TableRow key={rowKey} className="group odd:bg-muted/10 hover:bg-primary/4">
+                                <TableCell className="px-2 [&>span]:max-w-full [&>span>span]:max-w-full [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:min-h-7 [&_[data-slot=badge]]:min-w-0 [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:gap-1 [&_[data-slot=badge]]:whitespace-normal [&_[data-slot=badge]]:px-1.5 [&_[data-slot=badge]]:text-center [&_[data-slot=badge]]:leading-4 [&_[data-slot=badge]>span]:shrink-0"><StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} /></TableCell>
+                                <TableCell className="whitespace-normal break-words px-3 py-3 text-[13px] font-medium leading-5" title={row.target.storeTitle}>{row.target.storeTitle}</TableCell>
+                                <TableCell className="min-w-0 px-3 py-3 text-foreground/85" title={row.target.productName}>
                                 <button
-                                  className="block max-w-full whitespace-normal text-left leading-5 hover:text-primary hover:underline"
+                                  className="block min-h-8 max-w-full rounded-sm whitespace-normal break-words text-left text-[13px] leading-5 outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                   aria-label={`打开商品页：${row.target.productName}`}
                                   onClick={() => void openTargetProduct(row.target)}
                                 >
@@ -1142,14 +1134,14 @@ export default function App() {
                                 <TableCell className="px-2 font-mono text-xs tabular-nums text-muted-foreground">
                                   {formatTime(row.lastCheckedMs)}
                                 </TableCell>
-                                <TableCell className="px-1">
+                                <TableCell className="px-1 [&>button]:gap-1 [&>button]:px-1.5 [&>button]:text-xs">
                                   <ProductBarkRoute
                                     target={row.target}
                                     customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
                                     disabled={isAdding}
                                   />
                                 </TableCell>
-                                <TableCell className="sticky right-0 z-10 border-l border-border/40 bg-card/95 pr-2 group-hover:bg-muted">
+                                <TableCell className="sticky right-0 z-10 border-l border-border/40 bg-card px-1.5 group-hover:bg-muted">
                                   <Button
                                     variant="ghost"
                                     size="icon-sm"
@@ -1168,6 +1160,8 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </ScrollArea>
+                  <p className="shrink-0 border-t border-border/50 bg-muted/15 px-4 py-2 text-[11px] leading-4 text-muted-foreground min-[1280px]:hidden">横向滚动可查看更多信息 · 删除按钮固定在右侧</p>
+                  </>
                 )}
               </section>
             </div>
@@ -1177,7 +1171,7 @@ export default function App() {
               aria-label="监控概览、设置与活动日志"
             >
               <fieldset disabled={!ui.ready} className="contents" aria-label="监控设置与活动日志">
-              <section className="grid grid-cols-4 gap-2" aria-label="监控概览">
+              <section className="surface-panel summary-strip grid shrink-0 grid-cols-4 divide-x divide-border/60 overflow-hidden" aria-label="监控概览">
                 <div className="metric-tile">
                   <Radar className="size-4 text-primary" aria-hidden="true" />
                   <span className="metric-value">{ui.rows.length}</span>
