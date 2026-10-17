@@ -2,10 +2,10 @@
 
 <img src="docs/branding/app-icon-1024.png" alt="库存查询器应用图标" width="160" height="160" />
 
-独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.4**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
+独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.5**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
 
 [检查与打包模板](build-templates/README.md)
-[![源码版本: v1.1.4](https://img.shields.io/badge/source-v1.1.4-blue)](package.json)
+[![源码版本: v1.1.5](https://img.shields.io/badge/source-v1.1.5-blue)](package.json)
 [下载与发布记录](https://github.com/thomasDJMax/inventory-checker/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
@@ -21,11 +21,12 @@
 
 ## 本版更新
 
-- 页面改用冷灰底色与近白色卡片，减轻边框和阴影，统一标题、正文及 40 像素输入控件的层级与尺寸。
-- 监控概览合并为一块四列摘要，顶部保留 GitHub 与下载入口，移除始终显示的「LIVE」徽章和开源宣传句，让运行状态更容易辨认。
-- 精简新建监控表单中的常驻批次说明，保留 Apple Watch 的有效选择提示，为监控列表留出更多空间。
-- 监控表格最小宽度由 960 缩小到 820 像素，调整列宽与长文字换行，保留固定操作列，并在窄窗口提供横向滚动提示。
-- 延续右侧 360／400／420 像素宽度、独立滚动和单列设置控件；折叠面板副标题可自然换行，不改变监控逻辑、应用标识或已有配置。
+- 右侧设置栏使用更紧凑的折叠标题，缩小面板之间的留白，将常用监控选项集中在前面，减少上下查找。
+- 查询间隔和「到货后打开」采用左侧标签、右侧控件排列；Bark 地址继续使用全宽输入，提示音与暂停监控各占一行，文字与控件保持间距。
+- 将 Bark 用法和到货后行为的长说明放到可用键盘聚焦的信息按钮中，保留完整说明，减少常驻文字。
+- 中国大陆送货地区独立为默认收起的可选面板，摘要显示地址、未配置、待完成或错误状态；展开后省、市、区仍使用单列全宽控件。
+- 自动结账与查询线路按实际启用状态决定初始展开，优先保留用户已保存的折叠偏好；活动日志默认收起，展开后在内部滚动。
+- 延续右侧 360／400／420 像素宽度和独立滚动，不修改监控逻辑、应用标识、数据目录或已有配置。
 
 完整记录见 [CHANGELOG.md](CHANGELOG.md)，新图标的生成提示词保存在 [docs/branding/icon-prompt.txt](docs/branding/icon-prompt.txt)。上游旧品牌的宣传图与截图保留在 `docs/promo/`、`docs/screenshots/`，仅作为历史资源，不代表本版界面。
 
@@ -39,11 +40,13 @@
 4. 如果想在 iPhone 上收到到货通知，先按 [Bark 教程](#bark-从下载到使用)安装并配置 Bark；不需要手机推送可以跳过。
 5. 选择地区和品类，再勾选门店与型号，点击「添加监控」。
 6. 选择提示音、Bark 和「到货后打开」方式，再点一次「测试提醒与跳转」。
-7. 确认测试正常后点击「开始监控」。看到「未知」时先看活动日志，不要把它当成无货。
+7. 确认测试正常后点击「开始监控」。看到「未知」时展开右侧「活动日志」查看原因，不要把它当成无货。
 8. 如果经常出现「请求被 Apple 拦截」，并且电脑上装有 Clash，可以按[查询线路与 Clash 配置](#查询线路与-clash-配置)为查询单独设置出口。
 9. 想让应用在到货后替你走完结账页面，按[自动结账](#自动结账可选)配置。这一项默认关闭，不用可以跳过。
 
 Apple 可能限流或调整接口，库存也可能在提醒后立即变化。最终能否取货，以 Apple 官网下单时的结果为准。
+
+送货查询需要时再展开右侧「送货地区」选择省、市、区；选择区县后自动保存。自动结账与查询线路在未启用时默认收起，点击面板标题即可展开；应用会记住你手动调整过的折叠状态。
 
 ## 运行要求
 
@@ -59,7 +62,7 @@ Apple 可能限流或调整接口，库存也可能在提醒后立即变化。�
 
 ## 安装
 
-打开 [库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，在 **Assets** 中下载 `inventory-checker_1.1.4_aarch64.dmg`，源码归档为 `inventory-checker_1.1.4_source.zip`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
+打开 [库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，在 **Assets** 中下载 `inventory-checker_1.1.5_aarch64.dmg`，源码归档为 `inventory-checker_1.1.5_source.zip`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
 
 ### macOS Apple Silicon
 
@@ -68,7 +71,7 @@ Apple 可能限流或调整接口，库存也可能在提醒后立即变化。�
 3. 对照同一 Release 的 `SHA256SUMS.txt` 校验安装包：
 
 ```bash
-shasum -a 256 inventory-checker_1.1.4_aarch64.dmg
+shasum -a 256 inventory-checker_1.1.5_aarch64.dmg
 ```
 
 ### 其他平台自行构建
@@ -78,14 +81,14 @@ shasum -a 256 inventory-checker_1.1.4_aarch64.dmg
 Linux 打包继续使用 ASCII 名称 `guotan-radar`，桌面显示名称为「库存查询器」。若自行构建 `.deb`，示例安装命令如下（Ubuntu 24.04 构建的包需要 glibc 2.39 或更新版本）：
 
 ```bash
-sudo apt install "./inventory-checker_1.1.4_amd64.deb"
+sudo apt install "./inventory-checker_1.1.5_amd64.deb"
 ```
 
 自行构建 AppImage 后可执行：
 
 ```bash
-chmod +x "./inventory-checker_1.1.4_amd64.AppImage"
-"./inventory-checker_1.1.4_amd64.AppImage"
+chmod +x "./inventory-checker_1.1.5_amd64.AppImage"
+"./inventory-checker_1.1.5_amd64.AppImage"
 ```
 
 AppImage 需要 FUSE 2；Ubuntu 24.04 可安装 `libfuse2t64`，或使用 `--appimage-extract-and-run`。Windows 自行构建会生成 NSIS `*-setup.exe`，没有操作系统开发者签名。Linux 需要另行安装 Chrome、Edge 或 PATH 中的 Chromium。
@@ -646,7 +649,7 @@ listeners:
 
 本分支直接基于 suversal 果到雷达 `v1.0.22`（`7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9`）。Chromium 查询、多个产品品类、多门店监控、提示音、Bark、Clash 查询线路和可选自动结账均承自上游，不作为库存查询器新增功能。
 
-本分支新增了查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识、手动更新入口和新图标。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.4`、`1.1.3`、`1.1.2`、`1.1.1`、`1.1.0` 与 `1.0.23-local.1`。
+本分支新增了查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识、手动更新入口和新图标。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.5`、`1.1.4`、`1.1.3`、`1.1.2`、`1.1.1`、`1.1.0` 与 `1.0.23-local.1`。
 
 ## Apple 查询会话
 
@@ -792,7 +795,7 @@ pnpm tauri build --ci -- --locked
 
 [打包模板](build-templates/packages.yml)启用后只允许手动 `workflow_dispatch`，在 macOS、Windows 和 Linux runner 上原生构建，完成签名或安装检查后上传 Actions artifacts；它不会创建 Release 或更新清单。`1.1.0` 是本机验证后发布的版本，后续版本沿用本机验证后手动发布的流程，公开 Release 只提供本机构建的 macOS Apple Silicon 包。
 
-发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.4`）一致，并在对应平台验证安装包后再发布。
+发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.5`）一致，并在对应平台验证安装包后再发布。
 
 ## 代码结构
 
@@ -826,9 +829,13 @@ src/
 
 ## 验证范围
 
-1.1.4 调整界面样式、信息层级和表格排版。59 项前端测试通过；使用生产构建资源与隔离的 Tauri 数据，在应用内浏览器中检查了 900 × 640、1080 × 820、1440 × 820 桌面布局和 390 × 844 窄屏回退，以及浅色与深色画面。输入与选择控件实测为 40 像素，统计概览、长门店名、长状态、送货说明和空列表提示均未裁切或产生页面横向溢出。
+1.1.5 调整右侧设置栏的排列、说明展示和折叠行为，不修改 Rust 监控及结账逻辑。59 项前端测试通过，TypeScript 与生产资源构建通过。使用生产构建资源与隔离的 Tauri 数据，在应用内浏览器中检查了 900 × 640、1080 × 820、1440 × 820 桌面布局、390 × 844 窄屏回退及浅色和深色画面；页面身份、非空内容、无框架报错遮罩及正常场景控制台检查通过。
 
-隔离数据检查覆盖了查询间隔保存、折叠摘要、重新连接、Bark 弹窗打开与取消、键盘删除后的计数变化、列表横向滚动与侧栏独立纵向滚动，未见相关控制台错误。macOS Apple Silicon 应用完成构建、ad-hoc 签名、DMG 完整性和包内应用一致性检查，安装后进程已启动，升级前后配置文件校验一致。原生窗口截屏遇到 ScreenCaptureKit `-3811` 错误，本版画面验收依据生产资源预览，未将历史原生截图作为本版截图使用。
+在 1080 × 820 窗口、空监控列表、结账关闭、跟随系统代理且没有已存折叠偏好的条件下，侧栏内容总高度由 1.1.4 的 2571 像素降至 786 像素，常用设置及测试按钮可在首屏操作；已保存的手动展开偏好仍会保留，实际滚动长度取决于展开项目。输入与选择控件保持 40 像素高，900 像素窗口下最长教育商店选项完整可见。
+
+隔离交互验证覆盖了查询间隔保存、键盘提示说明和折叠记忆、异步配置加载后的默认展开、保存偏好优先、关闭结账或切换系统线路时保持正文展开、地区级联选择及未完成摘要、保存失败后的 Bark 和间隔草稿保留，以及地区折叠后的错误提示。40 条示例日志可在 192 像素正文中内部滚动。失败场景由测试数据故意返回错误，未更改真实设置或执行真实监控。
+
+macOS Apple Silicon 应用已完成本机构建、ad-hoc 签名和 DMG 完整性检查；安装后的应用与构建产物一致。已启动 1.1.5 并通过原生窗口截图确认右侧常用设置及测试按钮完整显示，升级前后配置文件校验一致，保留原有空监控列表。此版本未经过 Apple 公证，Intel Mac、Windows 与 Linux 安装未验证。
 
 历史版本的构建、界面检查及只读 Apple 查询结果不能视为本版重新验证的结论。缺少取货数据的响应不能当成无货。
 

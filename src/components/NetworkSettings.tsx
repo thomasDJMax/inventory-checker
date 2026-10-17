@@ -419,6 +419,8 @@ export function NetworkSettings({
       title="查询线路"
       subtitle={route ? `当前：${route}` : "Apple 查询使用的出口 IP"}
       summary={route ?? MODE_LABELS[network.mode]}
+      defaultOpen={network.mode !== "system"}
+      compact
     >
       <div className="field-group">
         <Label htmlFor="network-mode" className="control-label">出口方式</Label>

@@ -106,6 +106,8 @@ export function CheckoutSettings({ checkout, targets }: { checkout: Checkout; ta
       title="自动结账"
       subtitle="到货后自动走完结账页面，仅支持中国大陆直营店取货"
       summary={summarize(checkout)}
+      defaultOpen={checkout.enabled}
+      compact
     >
       <div className="grid min-w-0 gap-3">
         <div className="setting-row">

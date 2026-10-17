@@ -4,8 +4,8 @@ import {
   Activity,
   AlertTriangle,
   BellRing,
-  Clock3,
   Download,
+  Info,
   LoaderCircle,
   MapPin,
   PackageCheck,
@@ -16,13 +16,10 @@ import {
   Radar,
   RefreshCw,
   Settings2,
-  ShoppingBag,
   Smartphone,
   SquareTerminal,
   Trash2,
   Truck,
-  CirclePause,
-  Volume2,
 } from "lucide-react";
 
 import { Combobox } from "@/components/Combobox";
@@ -1167,7 +1164,7 @@ export default function App() {
             </div>
 
             <aside
-              className="workspace-sidebar flex min-h-0 min-w-0 flex-col gap-4 min-[900px]:overflow-y-auto min-[900px]:overscroll-contain min-[900px]:pr-2"
+              className="workspace-sidebar flex min-h-0 min-w-0 flex-col gap-3 min-[900px]:overflow-y-auto min-[900px]:overscroll-contain min-[900px]:pr-2"
               aria-label="监控概览、设置与活动日志"
             >
               <fieldset disabled={!ui.ready} className="contents" aria-label="监控设置与活动日志">
@@ -1199,46 +1196,143 @@ export default function App() {
                 icon={<Settings2 className="size-4" />}
                 title="监控设置"
                 subtitle="查询频率与提醒方式"
+                compact
                 summary={[
                   `每 ${ui.settings.intervalSeconds} 秒`,
-                  ui.settings.deliveryRegion
-                    ? `送货 ${ui.settings.deliveryRegion.city}${ui.settings.deliveryRegion.district}`
-                    : "未设送货地区",
-                  ui.settings.barkUrl ? "Bark 已设置" : "未设 Bark",
                   ui.settings.soundEnabled ? "提示音开" : "提示音关",
+                  ui.settings.barkUrl ? "Bark 已设置" : "未设 Bark",
                 ].join(" · ")}
               >
-
-                <div className="field-group">
-                  <Label htmlFor="interval" className="control-label">
-                    <Clock3 className="size-3.5" aria-hidden="true" /> 查询间隔
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="interval"
-                      type="number"
-                      min={5}
-                      className="control-surface select-text pr-12 tabular-nums"
-                      value={intervalValue}
-                      aria-invalid={intervalError !== null}
-                      aria-describedby={intervalError ? "interval-error" : undefined}
-                      onChange={(event) => {
-                        setIntervalDraft(event.target.value);
-                        setIntervalError(null);
-                      }}
-                      onBlur={() => void persistInterval()}
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">秒</span>
+                <div className="space-y-3">
+                  <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+                    <Label htmlFor="interval" className="text-sm font-normal">查询间隔</Label>
+                    <div className="relative min-w-0">
+                      <Input
+                        id="interval"
+                        type="number"
+                        min={5}
+                        className="control-surface select-text pr-12 tabular-nums"
+                        value={intervalValue}
+                        aria-invalid={intervalError !== null}
+                        aria-describedby={intervalError ? "interval-error" : undefined}
+                        onChange={(event) => {
+                          setIntervalDraft(event.target.value);
+                          setIntervalError(null);
+                        }}
+                        onBlur={() => void persistInterval()}
+                      />
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">秒</span>
+                    </div>
+                    {intervalError ? <p id="interval-error" role="alert" className="col-span-2 text-xs leading-5 text-destructive">{intervalError}</p> : null}
                   </div>
-                  {intervalError ? <p id="interval-error" role="alert" className="text-xs leading-5 text-destructive">{intervalError}</p> : null}
-                </div>
 
-                <div className="mt-3 field-group">
+                  <div className="field-group">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <Label htmlFor="bark" className="text-sm font-normal">默认 Bark 推送</Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" aria-label="Bark 推送说明" className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            <Info className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-64 leading-5">监控列表可为某个型号指定其他人的 Bark 地址。</TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <Input
+                      id="bark"
+                      className="control-surface select-text"
+                      placeholder="https://api.day.app/你的BarkKey"
+                      value={barkValue}
+                      aria-invalid={barkError}
+                      aria-describedby={barkError ? "bark-error" : undefined}
+                      onChange={(event) => {
+                        setBarkDraft(event.target.value);
+                        setBarkError(false);
+                      }}
+                      onBlur={() => void persistBark()}
+                    />
+                    {barkError ? <p id="bark-error" role="alert" className="text-xs leading-5 text-destructive">Bark 地址保存失败，输入已保留。失去焦点时会重试。</p> : null}
+                  </div>
+
+                  <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-3">
+                    <Label htmlFor="open-on-hit" className="text-sm font-normal">到货后打开</Label>
+                    <Select
+                      value={ui.settings.openOnHit}
+                      onValueChange={(value) => void saveSettings({ openOnHit: value as OpenOnHit })}
+                    >
+                      <SelectTrigger id="open-on-hit" className="control-surface w-full min-w-0" aria-label="到货后打开">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        <SelectItem value="none">不自动打开</SelectItem>
+                        <SelectItem value="bag">购物袋</SelectItem>
+                        <SelectItem value="education_bag">跳转至教育商店购物袋</SelectItem>
+                        <SelectItem value="product">商品详情</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="divide-y divide-border/50 border-y border-border/50">
+                    <div className="flex min-h-11 items-center justify-between gap-4 py-2">
+                      <Label htmlFor="sound" className="text-sm font-normal">提示音</Label>
+                      <Switch
+                        id="sound"
+                        aria-label="提示音"
+                        checked={ui.settings.soundEnabled}
+                        onCheckedChange={(value) => void saveSettings({ soundEnabled: value })}
+                      />
+                    </div>
+                    <div className="flex min-h-11 items-center justify-between gap-4 py-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Label htmlFor="stop-on-hit" className="text-sm font-normal">到货后暂停监控</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" aria-label="到货后暂停监控说明" className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                              <Info className="size-3.5" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-64 leading-5">
+                            {ui.settings.stopOnHit
+                              ? "任意一条监控到有货后暂停监控，提醒和自动结账只执行这一轮，需要时再手动开始。"
+                              : "持续有货时，每一轮查询都会重新提醒；开启了自动结账且上一次没有成功时，也会再次尝试。"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <Switch
+                        id="stop-on-hit"
+                        aria-label="到货后暂停监控"
+                        checked={ui.settings.stopOnHit}
+                        onCheckedChange={(value) => void saveSettings({ stopOnHit: value })}
+                      />
+                    </div>
+                  </div>
+
+                  <Button variant="outline" className="h-10 w-full rounded-xl border-border/70 bg-background/30" onClick={() => void testNotify()}>
+                    <BellRing aria-hidden="true" /> 测试提醒与跳转
+                  </Button>
+                </div>
+              </CollapsiblePanel>
+
+              <CollapsiblePanel
+                id="delivery"
+                icon={<MapPin className="size-4" />}
+                title="送货地区"
+                subtitle="可选；选完省、市、区后自动保存，仅用于中国大陆送货日期查询"
+                compact
+                defaultOpen={false}
+                summary={
+                  deliveryError ? <span role="alert" className="text-destructive">{deliveryError}</span>
+                  : deliverySaving ? "正在保存送货地区…"
+                  : deliveryOptionsLoading ? "正在读取地区…"
+                  : deliveryDirty ? deliverySelectionValid ? "即将保存送货地区" : "继续选择省、市、区"
+                  : ui.settings.deliveryRegion ? `${ui.settings.deliveryRegion.city} · ${ui.settings.deliveryRegion.district}`
+                  : "未设置 · 送货日期未启用"
+                }
+              >
+                <div className="field-group">
                   <div className="flex items-center justify-between gap-3">
-                    <Label className="control-label">
-                      <MapPin className="size-3.5" aria-hidden="true" /> 中国大陆送货地区
-                    </Label>
-                    <span className="text-[10px] text-muted-foreground" role="status" aria-live="polite">
+                    <span className="text-xs font-medium text-muted-foreground">中国大陆</span>
+                    <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
                       {deliverySaving
                         ? "保存中…"
                         : deliveryOptionsLoading
@@ -1339,101 +1433,27 @@ export default function App() {
                   ) : null}
                 </div>
 
-                <div className="mt-3 field-group">
-                  <Label htmlFor="bark" className="control-label">
-                    <BellRing className="size-3.5" aria-hidden="true" /> 默认 Bark 推送
-                  </Label>
-                  <Input
-                    id="bark"
-                    className="control-surface select-text"
-                    placeholder="https://api.day.app/你的BarkKey"
-                    value={barkValue}
-                    aria-invalid={barkError}
-                    aria-describedby={barkError ? "bark-error" : undefined}
-                    onChange={(event) => {
-                      setBarkDraft(event.target.value);
-                      setBarkError(false);
-                    }}
-                    onBlur={() => void persistBark()}
-                  />
-                  {barkError ? <p id="bark-error" role="alert" className="text-xs leading-5 text-destructive">Bark 地址保存失败，输入已保留。失去焦点时会重试。</p> : null}
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    监控列表可为某个型号指定其他人的 Bark 地址。
-                  </p>
-                </div>
-
-                <div className="mt-4 space-y-1 rounded-xl border border-border/55 bg-background/30 p-1">
-                  <div className="setting-row">
-                    <span className="flex items-center gap-2 text-sm"><Volume2 className="size-4 text-muted-foreground" aria-hidden="true" />提示音</span>
-                    <Switch
-                      id="sound"
-                      aria-label="提示音"
-                      checked={ui.settings.soundEnabled}
-                      onCheckedChange={(value) => void saveSettings({ soundEnabled: value })}
-                    />
-                  </div>
-                  <div className="grid min-w-0 gap-2 px-3 py-2">
-                    <Label htmlFor="open-on-hit" className="flex items-center gap-2 text-sm font-normal">
-                      <ShoppingBag className="size-4 text-muted-foreground" aria-hidden="true" />到货后打开
-                    </Label>
-                    <Select
-                      value={ui.settings.openOnHit}
-                      onValueChange={(value) =>
-                        void saveSettings({ openOnHit: value as OpenOnHit })
-                      }
-                    >
-                      <SelectTrigger id="open-on-hit" className="h-10 w-full min-w-0 bg-background/45" aria-label="到货后打开">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent align="end">
-                        <SelectItem value="none">不自动打开</SelectItem>
-                        <SelectItem value="bag">购物袋</SelectItem>
-                        <SelectItem value="education_bag">跳转至教育商店购物袋</SelectItem>
-                        <SelectItem value="product">商品详情</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="setting-row">
-                    <Label htmlFor="stop-on-hit" className="flex items-center gap-2 text-sm font-normal">
-                      <CirclePause className="size-4 text-muted-foreground" aria-hidden="true" />到货后暂停监控
-                    </Label>
-                    <Switch
-                      id="stop-on-hit"
-                      aria-label="到货后暂停监控"
-                      checked={ui.settings.stopOnHit}
-                      onCheckedChange={(value) => void saveSettings({ stopOnHit: value })}
-                    />
-                  </div>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {ui.settings.stopOnHit
-                    ? "任意一条监控到有货后暂停监控，提醒和自动结账只执行这一轮，需要时再手动开始。"
-                    : "持续有货时，每一轮查询都会重新提醒；开启了自动结账且上一次没有成功时，也会再次尝试。"}
-                </p>
-
-                <Button variant="outline" className="mt-3 h-10 w-full rounded-xl border-border/70 bg-background/30" onClick={() => void testNotify()}>
-                  <BellRing aria-hidden="true" /> 测试提醒与跳转
-                </Button>
               </CollapsiblePanel>
 
               <CheckoutSettings checkout={ui.settings.checkout} targets={ui.settings.targets} />
 
               <NetworkSettings network={ui.settings.network} running={ui.running} route={ui.route} />
 
-              <section className="surface-panel flex min-h-[26rem] flex-1 flex-col overflow-hidden" aria-labelledby="activity-log-title">
-                <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <SquareTerminal className="size-[18px] text-muted-foreground" aria-hidden="true" />
-                    <h2 id="activity-log-title" className="text-base font-semibold">活动日志</h2>
-                  </div>
-                  <span className="text-xs tabular-nums text-muted-foreground">最新 {ui.logs.length} 条</span>
-                </div>
-                <ScrollArea className="min-h-0 flex-1 p-4" aria-label="活动日志内容">
-                  <pre className="font-mono text-[13px] leading-6 whitespace-pre-wrap break-words text-foreground/80 select-text">
+              <CollapsiblePanel
+                id="activity-log"
+                icon={<SquareTerminal className="size-4" />}
+                title="活动日志"
+                subtitle="最近的查询与提醒记录"
+                summary={ui.logs.length ? `最新 ${ui.logs.length} 条记录` : "暂无活动记录"}
+                compact
+                defaultOpen={false}
+              >
+                <ScrollArea className="h-48 min-w-0" aria-label="活动日志内容">
+                  <pre className="pr-3 font-mono text-[13px] leading-6 whitespace-pre-wrap break-words text-foreground/80 select-text">
                     {ui.logs.length === 0 ? "等待监控活动…" : ui.logs.join("\n")}
                   </pre>
                 </ScrollArea>
-              </section>
+              </CollapsiblePanel>
               </fieldset>
             </aside>
           </div>
