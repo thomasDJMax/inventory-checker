@@ -305,7 +305,7 @@
   }
 
   .monitor-product-cell,
-  .monitor-store-heading > th {
+  .monitor-store-toggle {
     padding-inline: 8px;
   }
 

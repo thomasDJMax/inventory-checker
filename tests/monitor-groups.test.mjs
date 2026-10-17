@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { groupMonitorRows } from "../src/lib/monitorGroups.ts";
+import { groupMonitorRows, prioritizeInStockGroups } from "../src/lib/monitorGroups.ts";
 import { filterMonitorRows } from "../src/lib/monitorFilter.ts";
 import { isUntrusted } from "../src/lib/types.ts";
 
@@ -152,4 +152,102 @@ test("重复调用创建独立的分组和计数，保留原行引用", () => {
   assert.notEqual(previous[0].counts, next[0].counts);
   assert.equal(previous[0].rows[0], next[0].rows[0]);
   assert.deepEqual(next[0].counts, { inStock: 1, unavailable: 0, pending: 0, unconfirmed: 0 });
+});
+
+test("有货门店优先，两个门店分区分别保留首次出现顺序", () => {
+  const groups = groupMonitorRows([
+    row({ storeNumber: "UNAVAILABLE-A" }, { kind: "out_of_stock" }),
+    row({ storeNumber: "AVAILABLE-A" }, { kind: "in_stock" }),
+    row({ storeNumber: "UNKNOWN-A" }),
+    row({ storeNumber: "AVAILABLE-B" }, { kind: "in_stock" }),
+    row({ storeNumber: "UNAVAILABLE-B" }, { kind: "out_of_stock" }),
+  ]);
+  assert.deepEqual(prioritizeInStockGroups(groups).map(({ storeNumber }) => storeNumber), [
+    "AVAILABLE-A", "AVAILABLE-B", "UNAVAILABLE-A", "UNKNOWN-A", "UNAVAILABLE-B",
+  ]);
+});
+
+test("组内有货型号优先，其余状态不会彼此重排", () => {
+  const unavailable = row({ partNumber: "UNAVAILABLE" }, { kind: "out_of_stock" });
+  const availableA = row({ partNumber: "AVAILABLE-A" }, { kind: "in_stock" });
+  const pending = row({ partNumber: "PENDING" });
+  const availableB = row({ partNumber: "AVAILABLE-B" }, { kind: "in_stock" });
+  const failed = row({ partNumber: "FAILED" }, { kind: "unknown", reason: "transport", detail: "timeout" });
+  const groups = groupMonitorRows([unavailable, availableA, pending, availableB, failed]);
+  assert.deepEqual(prioritizeInStockGroups(groups)[0].rows, [
+    availableA, availableB, unavailable, pending, failed,
+  ]);
+});
+
+test("冻结分组、计数和行数组后仍可排序，保留身份、计数引用及原行引用", () => {
+  const first = row({ storeNumber: "R389", partNumber: "UNAVAILABLE" }, { kind: "out_of_stock" });
+  const second = row({ storeNumber: "R359", partNumber: "PENDING" });
+  const third = row({ storeNumber: "R359", partNumber: "AVAILABLE" }, { kind: "in_stock" });
+  const groups = groupMonitorRows([first, second, third]);
+  for (const group of groups) {
+    Object.freeze(group.rows);
+    Object.freeze(group.counts);
+    Object.freeze(group);
+  }
+  Object.freeze(groups);
+  const previous = structuredClone(groups);
+  const ordered = prioritizeInStockGroups(groups);
+
+  assert.deepEqual(groups, previous);
+  assert.notEqual(ordered, groups);
+  for (const original of groups) {
+    const result = ordered.find(({ key }) => key === original.key);
+    assert.ok(result);
+    assert.equal(result.key, original.key);
+    assert.equal(result.locale, original.locale);
+    assert.equal(result.storeNumber, original.storeNumber);
+    assert.equal(result.storeTitle, original.storeTitle);
+    assert.equal(result.counts, original.counts);
+    assert.notEqual(result.rows, original.rows);
+    for (const originalRow of original.rows) {
+      assert.equal(result.rows.find(({ target }) => target === originalRow.target), originalRow);
+    }
+  }
+  assert.deepEqual(ordered[0].rows, [third, second]);
+  assert.equal(ordered[1].rows[0], first);
+});
+
+test("未知、待开放取货或送货文字不表示门店有货，只依据取货库存状态排序", () => {
+  const delivery = Object.freeze({ status: "available", quote: "明天送达" });
+  const pending = Object.freeze({
+    ...row({ storeNumber: "DELIVERY", partNumber: "DELIVERY" }),
+    delivery,
+    pickupDetails: Object.freeze({ pickupDisplay: "available", pickupQuote: "有货", saleReason: null, saleMessage: null }),
+  });
+  const unavailable = Object.freeze({
+    ...row({ storeNumber: "DELIVERY", partNumber: "UNAVAILABLE" }, { kind: "out_of_stock" }),
+    delivery,
+  });
+  const pickupPending = row({ storeNumber: "DELIVERY", partNumber: "PICKUP-PENDING" }, { kind: "unknown", reason: "pickup_pending" });
+  const available = row({ storeNumber: "AVAILABLE" }, { kind: "in_stock" });
+  const ordered = prioritizeInStockGroups(groupMonitorRows([pending, unavailable, pickupPending, available]));
+  assert.deepEqual(ordered.map(({ storeNumber }) => storeNumber), ["AVAILABLE", "DELIVERY"]);
+  assert.deepEqual(ordered[1].rows, [pending, unavailable, pickupPending]);
+  assert.equal(ordered[1].counts.inStock, 0);
+});
+
+test("筛选后只按可见型号判定有货优先，隐藏有货型号不提升门店顺序", () => {
+  const hiddenAvailable = row({ storeNumber: "FIRST", productName: "Apple Watch Ultra 4" }, { kind: "in_stock" });
+  const firstVisible = row({ storeNumber: "FIRST", partNumber: "PHONE-A" }, { kind: "out_of_stock" });
+  const secondVisible = row({ storeNumber: "SECOND", partNumber: "PHONE-B" });
+  const thirdVisible = row({ storeNumber: "THIRD", partNumber: "PHONE-C" }, { kind: "in_stock" });
+  const input = Object.freeze([hiddenAvailable, firstVisible, secondVisible, thirdVisible]);
+  const ordered = prioritizeInStockGroups(groupMonitorRows(filterMonitorRows(input, "iPhone")));
+  assert.deepEqual(ordered.map(({ storeNumber }) => storeNumber), ["THIRD", "FIRST", "SECOND"]);
+  assert.deepEqual(ordered.flatMap(({ rows }) => rows), [thirdVisible, firstVisible, secondVisible]);
+  assert.equal(ordered.find(({ storeNumber }) => storeNumber === "FIRST").counts.inStock, 0);
+  assert.equal(input[0], hiddenAvailable);
+});
+
+test("空输入和无匹配型号保持为空", () => {
+  const empty = Object.freeze([]);
+  const result = prioritizeInStockGroups(empty);
+  assert.deepEqual(result, []);
+  assert.notEqual(result, empty);
+  assert.deepEqual(prioritizeInStockGroups(groupMonitorRows(filterMonitorRows([row()], "不存在"))), []);
 });

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import packageInfo from "../package.json";
 import {
   Activity,
   AlertTriangle,
   BellRing,
+  ChevronDown,
   Clock3,
   Download,
   Info,
@@ -109,7 +110,8 @@ import {
 import { describeBrowserFailure, describeBrowserRecovery, describeDelivery, describeMonitorStatus, describePickupDate, type DeliveryTone } from "@/lib/monitorLog";
 import { compareNewestProducts, sortMonitorsNewestFirst } from "@/lib/productOrder";
 import { filterMonitorRows } from "@/lib/monitorFilter";
-import { groupMonitorRows } from "@/lib/monitorGroups";
+import { groupMonitorRows, prioritizeInStockGroups } from "@/lib/monitorGroups";
+import { isMonitorGroupExpanded, MONITOR_EXPANSION_STORAGE_KEY, parseMonitorExpansion, type MonitorExpansionPreferences } from "@/lib/monitorExpansion";
 
 const EMPTY_DELIVERY_LOCALITIES: DeliveryLocalities = {
   states: [],
@@ -472,7 +474,23 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [watcherBusy, setWatcherBusy] = useState(false);
   const [monitorQuery, setMonitorQuery] = useState("");
+  const [monitorExpansionPreferences, setMonitorExpansionPreferences] = useState<MonitorExpansionPreferences>(() => {
+    try {
+      return parseMonitorExpansion(localStorage.getItem(MONITOR_EXPANSION_STORAGE_KEY));
+    } catch {
+      return {};
+    }
+  });
+  const [searchMonitorExpansion, setSearchMonitorExpansion] = useState<MonitorExpansionPreferences>({});
   const monitorSearchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MONITOR_EXPANSION_STORAGE_KEY, JSON.stringify(monitorExpansionPreferences));
+    } catch {
+      // 本机存储不可用时仍可折叠，只是不记忆重启后的展开状态。
+    }
+  }, [monitorExpansionPreferences]);
 
   async function connectEngine() {
     setConnecting(true);
@@ -649,8 +667,34 @@ export default function App() {
 
   const sortedRows = useMemo(() => sortMonitorsNewestFirst(ui.rows), [ui.rows]);
   const visibleRows = useMemo(() => filterMonitorRows(sortedRows, monitorQuery), [sortedRows, monitorQuery]);
-  const monitorGroups = useMemo(() => groupMonitorRows(visibleRows), [visibleRows]);
+  const monitorGroups = useMemo(() => prioritizeInStockGroups(groupMonitorRows(visibleRows)), [visibleRows]);
   const hasMonitorQuery = monitorQuery.trim().length > 0;
+  const expandedMonitorGroups = useMemo(() => new Map(monitorGroups.map((group) => [
+    group.key,
+    isMonitorGroupExpanded(group.key, group.counts.inStock, monitorExpansionPreferences, hasMonitorQuery, searchMonitorExpansion),
+  ])), [monitorGroups, monitorExpansionPreferences, hasMonitorQuery, searchMonitorExpansion]);
+  const anyMonitorGroupExpanded = monitorGroups.some((group) => expandedMonitorGroups.get(group.key));
+
+  function updateMonitorQuery(value: string) {
+    setMonitorQuery(value);
+    setSearchMonitorExpansion({});
+  }
+
+  function setMonitorGroupOpen(key: string, open: boolean) {
+    const update = (previous: MonitorExpansionPreferences) => previous[key] === open
+      ? previous : { ...previous, [key]: open };
+    if (hasMonitorQuery) setSearchMonitorExpansion(update);
+    else setMonitorExpansionPreferences(update);
+  }
+
+  function setAllMonitorGroupsOpen(open: boolean) {
+    const update = (previous: MonitorExpansionPreferences) => ({
+      ...previous,
+      ...Object.fromEntries(monitorGroups.map((group) => [group.key, open])),
+    });
+    if (hasMonitorQuery) setSearchMonitorExpansion(update);
+    else setMonitorExpansionPreferences(update);
+  }
   const browserFailure = describeBrowserFailure(ui.rows);
   const browserRunningLabel = secondsUntilNextCheck !== null && secondsUntilNextCheck > 0
     ? `浏览器未连接 · 约 ${secondsUntilNextCheck} 秒后重试`
@@ -1054,7 +1098,7 @@ export default function App() {
 
               <section className="surface-panel monitor-list-panel flex min-h-[360px] min-w-0 flex-1 min-[900px]:min-h-0 flex-col overflow-hidden" aria-labelledby="monitor-list-title">
                 <div className="monitor-list-toolbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <div className="section-icon" aria-hidden="true">
                       <Activity className="size-4" />
                     </div>
@@ -1066,31 +1110,46 @@ export default function App() {
                     </span>
                   </div>
                   {ui.rows.length > 0 || monitorQuery.length > 0 ? (
-                    <div className="relative min-w-0 basis-full min-[540px]:w-44 min-[540px]:basis-auto min-[1280px]:w-52">
-                      <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                      <Input
-                        ref={monitorSearchRef}
-                        role="searchbox"
-                        aria-label="查找监控"
-                        aria-describedby="monitor-filter-summary"
-                        placeholder="门店、型号或 SKU"
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="h-9 rounded-lg bg-background/50 pr-9 pl-9 text-xs shadow-none md:text-xs"
-                        value={monitorQuery}
-                        onChange={(event) => setMonitorQuery(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape" && !event.nativeEvent.isComposing && monitorQuery) {
-                            event.preventDefault();
-                            setMonitorQuery("");
-                          }
-                        }}
-                      />
-                      {monitorQuery ? (
-                        <button type="button" aria-label="清除监控筛选" className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setMonitorQuery(""); monitorSearchRef.current?.focus(); }}>
-                          <X className="size-3.5" aria-hidden="true" />
-                        </button>
+                    <div className="monitor-list-controls flex min-w-0 basis-full items-center gap-2 min-[720px]:basis-auto">
+                      {monitorGroups.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 rounded-lg px-2 text-xs text-muted-foreground"
+                          aria-label={`全部${anyMonitorGroupExpanded ? "收起" : "展开"}${hasMonitorQuery ? "匹配" : ""}门店`}
+                          onClick={() => setAllMonitorGroupsOpen(!anyMonitorGroupExpanded)}
+                        >
+                          <ChevronDown className={`size-3.5 ${anyMonitorGroupExpanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                          {anyMonitorGroupExpanded ? "全部收起" : "全部展开"}
+                        </Button>
                       ) : null}
+                      <div className="relative min-w-0 flex-1 min-[720px]:w-32 min-[720px]:flex-none min-[1080px]:w-40 min-[1280px]:w-44">
+                        <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                        <Input
+                          ref={monitorSearchRef}
+                          role="searchbox"
+                          aria-label="查找监控"
+                          aria-describedby="monitor-filter-summary"
+                          placeholder="门店 / 型号"
+                          autoComplete="off"
+                          spellCheck={false}
+                          className={`h-9 rounded-lg bg-background/50 pl-9 text-xs shadow-none md:text-xs ${monitorQuery ? "pr-9" : "pr-3"}`}
+                          value={monitorQuery}
+                          onChange={(event) => updateMonitorQuery(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape" && !event.nativeEvent.isComposing && monitorQuery) {
+                              event.preventDefault();
+                              updateMonitorQuery("");
+                            }
+                          }}
+                        />
+                        {monitorQuery ? (
+                          <button type="button" aria-label="清除监控筛选" className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { updateMonitorQuery(""); monitorSearchRef.current?.focus(); }}>
+                            <X className="size-3.5" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1119,12 +1178,12 @@ export default function App() {
                     <Search className="size-6 shrink-0 text-muted-foreground/70" aria-hidden="true" />
                     <p className="text-sm font-medium">没有匹配的监控</p>
                     <p className="text-xs leading-5 text-muted-foreground">试试其他关键词，或清除筛选查看全部监控。</p>
-                    <Button variant="ghost" size="sm" className="h-8 text-primary" onClick={() => { setMonitorQuery(""); monitorSearchRef.current?.focus(); }}>清除筛选</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-primary" onClick={() => { updateMonitorQuery(""); monitorSearchRef.current?.focus(); }}>清除筛选</Button>
                   </div>
                 ) : (
                   <ScrollArea aria-label="监控列表内容，可上下滚动" className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:overflow-visible">
                     <Table className="monitor-table w-full table-fixed">
-                      <caption className="sr-only">按门店分组的监控列表：完整型号与预计送货、取货状态、监控操作。门店摘要仅统计当前显示的型号。待确认包括待查询、待开放或暂停取货；查询异常对应右侧未确认项目。</caption>
+                      <caption className="sr-only">按门店分组的监控列表，有货门店和有货型号优先。点击门店标题展开或收起，折叠不影响后台监控。查找期间默认展开匹配门店，摘要仅统计当前匹配型号。待确认包括待查询、待开放或暂停取货；查询异常对应右侧未确认项目。</caption>
                       <colgroup>
                         <col />
                         <col className="monitor-status-column" />
@@ -1137,95 +1196,120 @@ export default function App() {
                           <TableHead scope="col" className="px-0 text-center text-[11px] text-muted-foreground">操作</TableHead>
                         </TableRow>
                       </TableHeader>
-                      {monitorGroups.map((storeGroup) => (
-                        <TableBody key={storeGroup.key} aria-labelledby={`monitor-store-${encodeURIComponent(storeGroup.key)}`}>
-                          <TableRow className="monitor-store-heading border-t border-border/70 bg-muted/55 hover:bg-muted/55">
-                            <TableHead scope="rowgroup" colSpan={3} className="h-auto whitespace-normal px-3 py-2.5">
-                              <div className="monitor-store-heading-layout flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                                <div className="flex min-w-0 flex-1 items-start gap-2">
-                                  <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                                  <div className="min-w-0">
-                                    <h3 id={`monitor-store-${encodeURIComponent(storeGroup.key)}`} className="monitor-store-name text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]">{storeGroup.storeTitle}</h3>
-                                    <p className="mt-0.5 text-[10px] font-normal leading-4 text-muted-foreground [overflow-wrap:anywhere]">
-                                      {ui.regions.find((region) => region.locale === storeGroup.locale)?.title ?? storeGroup.locale} · {storeGroup.storeNumber} · {hasMonitorQuery ? "匹配 " : ""}{storeGroup.rows.length} 型号
-                                    </p>
-                                  </div>
-                                </div>
-                                <div role="group" className="monitor-store-summary flex min-w-0 max-w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-medium leading-4 tabular-nums" aria-label={`${hasMonitorQuery ? "匹配型号" : "门店"}取货汇总`}>
-                                  {storeGroup.counts.inStock > 0 ? <span className="inline-flex items-center gap-1 rounded-md bg-in-stock/12 px-1.5 py-1 font-semibold text-in-stock"><PackageCheck className="size-3 shrink-0" aria-hidden="true" />{storeGroup.counts.inStock} 有货</span> : null}
-                                  {storeGroup.counts.unavailable > 0 ? <span className="text-muted-foreground">{storeGroup.counts.unavailable} 不可取货</span> : null}
-                                  {storeGroup.counts.pending > 0 ? <span className="text-muted-foreground">{storeGroup.counts.pending} 待确认</span> : null}
-                                  {storeGroup.counts.unconfirmed > 0 ? <span className="text-unknown">{storeGroup.counts.unconfirmed} 查询异常</span> : null}
-                                </div>
-                              </div>
-                            </TableHead>
-                          </TableRow>
-                          {storeGroup.rows.map((row) => {
-                            const rowKey = targetKey(row.target);
-                            const removing = removingTargetKeys.has(rowKey);
-                            return (
-                              <TableRow key={rowKey} data-availability={row.availability.kind} className="monitor-model-row group hover:bg-primary/4 focus-within:bg-muted/25">
-                                <TableCell className="monitor-product-cell min-w-0 align-top whitespace-normal px-3 py-2.5">
-                                  <button
-                                    className="monitor-product-name block max-w-full rounded-sm text-left text-[13px] font-medium leading-5 text-foreground/90 outline-none [overflow-wrap:anywhere] hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    aria-label={`打开商品页：${row.target.productName}`}
-                                    title={row.target.productName}
-                                    onClick={() => void openTargetProduct(row.target)}
-                                  >
-                                    {row.target.productName}
-                                  </button>
-                                  {row.target.companionPart && row.target.kitPart ? (
-                                    <WatchBandPicker
-                                      target={row.target}
-                                      defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
-                                      disabled={isAdding}
-                                    />
-                                  ) : null}
-                                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] leading-4 text-muted-foreground">
-                                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
-                                      <Truck className="size-3 shrink-0" aria-hidden="true" />
-                                      <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
-                                    </span>
-                                    <span className="inline-flex min-w-0 items-center gap-1.5 tabular-nums" aria-label={row.lastCheckedMs !== null ? `最后检查：${formatTime(row.lastCheckedMs)}` : "尚未检查"}>
-                                      <Clock3 className="size-3 shrink-0" aria-hidden="true" />
-                                      {row.lastCheckedMs !== null ? `检查 ${formatTime(row.lastCheckedMs)}` : "尚未检查"}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="monitor-status-cell min-w-0 align-top whitespace-normal px-2 py-2.5 text-center">
-                                  <StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} />
-                                </TableCell>
-                                <TableCell className="monitor-actions-cell align-top px-0 py-2.5">
-                                  <div className="monitor-row-actions">
-                                    <ProductBarkRoute
-                                      target={row.target}
-                                      customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
-                                      disabled={isAdding}
-                                      compact
-                                    />
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                          aria-label={`${removing ? "正在删除监控" : "删除监控"}：${row.target.storeTitle} · ${row.target.productName}`}
-                                          aria-busy={removing}
-                                          disabled={isAdding || removing}
-                                          onClick={() => void onRemove(row.target)}
-                                        >
-                                          {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>删除这条监控</TooltipContent>
-                                    </Tooltip>
-                                  </div>
-                                </TableCell>
+                      {monitorGroups.map((storeGroup) => {
+                        const groupId = `monitor-store-${encodeURIComponent(storeGroup.key)}`;
+                        const expanded = expandedMonitorGroups.get(storeGroup.key) ?? false;
+                        const regionTitle = ui.regions.find((region) => region.locale === storeGroup.locale)?.title ?? storeGroup.locale;
+                        return (
+                          <Fragment key={storeGroup.key}>
+                            <TableBody aria-labelledby={`${groupId}-name ${groupId}-meta`}>
+                              <TableRow className="monitor-store-heading border-t border-border/70 bg-muted/55 hover:bg-muted/55">
+                                <TableHead scope="row" colSpan={3} className="h-auto whitespace-normal p-0">
+                                  <h3 className="m-0">
+                                    <button
+                                      type="button"
+                                      className="monitor-store-toggle monitor-store-heading-layout flex min-h-14 w-full min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5 text-left outline-none hover:bg-primary/4 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                                      aria-expanded={expanded}
+                                      aria-controls={`${groupId}-models`}
+                                      aria-describedby={`${groupId}-summary`}
+                                      aria-label={`${expanded ? "收起" : "展开"}门店：${storeGroup.storeTitle}（${regionTitle} · ${storeGroup.storeNumber}）`}
+                                      onClick={() => setMonitorGroupOpen(storeGroup.key, !expanded)}
+                                    >
+                                      <span className="flex min-w-0 flex-1 items-start gap-2">
+                                        <ChevronDown className={`mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform ${expanded ? "" : "-rotate-90"}`} aria-hidden="true" />
+                                        <span className="flex min-w-0 flex-col">
+                                          <span id={`${groupId}-name`} className="monitor-store-name text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]">{storeGroup.storeTitle}</span>
+                                          <span id={`${groupId}-meta`} className="mt-0.5 text-[10px] font-normal leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+                                            {regionTitle} · {storeGroup.storeNumber} · {hasMonitorQuery ? "匹配 " : ""}{storeGroup.rows.length} 型号
+                                          </span>
+                                        </span>
+                                      </span>
+                                      <span id={`${groupId}-summary`} className="monitor-store-summary flex min-w-0 max-w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-medium leading-4 tabular-nums">
+                                        {storeGroup.counts.inStock > 0 ? <span className="inline-flex items-center gap-1 rounded-md bg-in-stock/12 px-1.5 py-1 font-semibold text-in-stock"><PackageCheck className="size-3 shrink-0" aria-hidden="true" />{storeGroup.counts.inStock} 有货</span> : null}
+                                        {storeGroup.counts.unavailable > 0 ? <span className="text-muted-foreground">{storeGroup.counts.unavailable} 不可取货</span> : null}
+                                        {storeGroup.counts.pending > 0 ? <span className="text-muted-foreground">{storeGroup.counts.pending} 待确认</span> : null}
+                                        {storeGroup.counts.unconfirmed > 0 ? <span className="text-unknown">{storeGroup.counts.unconfirmed} 查询异常</span> : null}
+                                      </span>
+                                    </button>
+                                  </h3>
+                                </TableHead>
                               </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      ))}
+                            </TableBody>
+                            <TableBody
+                              id={`${groupId}-models`}
+                              aria-labelledby={`${groupId}-name ${groupId}-meta`}
+                              hidden={!expanded}
+                              onFocusCapture={() => setMonitorGroupOpen(storeGroup.key, true)}
+                              onPointerDownCapture={() => setMonitorGroupOpen(storeGroup.key, true)}
+                            >
+                              {expanded ? storeGroup.rows.map((row) => {
+                                const rowKey = targetKey(row.target);
+                                const removing = removingTargetKeys.has(rowKey);
+                                return (
+                                  <TableRow key={rowKey} data-availability={row.availability.kind} className="monitor-model-row group hover:bg-primary/4 focus-within:bg-muted/25">
+                                    <TableCell className="monitor-product-cell min-w-0 align-top whitespace-normal px-3 py-2.5">
+                                      <button
+                                        className="monitor-product-name block max-w-full rounded-sm text-left text-[13px] font-medium leading-5 text-foreground/90 outline-none [overflow-wrap:anywhere] hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                        aria-label={`打开商品页：${row.target.productName}`}
+                                        title={row.target.productName}
+                                        onClick={() => void openTargetProduct(row.target)}
+                                      >
+                                        {row.target.productName}
+                                      </button>
+                                      {row.target.companionPart && row.target.kitPart ? (
+                                        <WatchBandPicker
+                                          target={row.target}
+                                          defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
+                                          disabled={isAdding}
+                                        />
+                                      ) : null}
+                                      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] leading-4 text-muted-foreground">
+                                        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                                          <Truck className="size-3 shrink-0" aria-hidden="true" />
+                                          <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
+                                        </span>
+                                        <span className="inline-flex min-w-0 items-center gap-1.5 tabular-nums" aria-label={row.lastCheckedMs !== null ? `最后检查：${formatTime(row.lastCheckedMs)}` : "尚未检查"}>
+                                          <Clock3 className="size-3 shrink-0" aria-hidden="true" />
+                                          {row.lastCheckedMs !== null ? `检查 ${formatTime(row.lastCheckedMs)}` : "尚未检查"}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="monitor-status-cell min-w-0 align-top whitespace-normal px-2 py-2.5 text-center">
+                                      <StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} />
+                                    </TableCell>
+                                    <TableCell className="monitor-actions-cell align-top px-0 py-2.5">
+                                      <div className="monitor-row-actions">
+                                        <ProductBarkRoute
+                                          target={row.target}
+                                          customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
+                                          disabled={isAdding}
+                                          compact
+                                        />
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon-sm"
+                                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                              aria-label={`${removing ? "正在删除监控" : "删除监控"}：${row.target.storeTitle} · ${row.target.productName}`}
+                                              aria-busy={removing}
+                                              disabled={isAdding || removing}
+                                              onClick={() => void onRemove(row.target)}
+                                            >
+                                              {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>删除这条监控</TooltipContent>
+                                        </Tooltip>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }) : null}
+                            </TableBody>
+                          </Fragment>
+                        );
+                      })}
                     </Table>
                   </ScrollArea>
                 )}

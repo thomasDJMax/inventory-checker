@@ -56,3 +56,22 @@ export function groupMonitorRows(rows: readonly TargetState[]): MonitorGroup[] {
 
   return [...groups.values()];
 }
+
+/** 有货门店和组内有货型号优先；各分区内保留原顺序，不修改分组、计数或监控行。 */
+export function prioritizeInStockGroups(groups: readonly MonitorGroup[]): MonitorGroup[] {
+  const inStockGroups: MonitorGroup[] = [];
+  const otherGroups: MonitorGroup[] = [];
+
+  for (const group of groups) {
+    const inStockRows: TargetState[] = [];
+    const otherRows: TargetState[] = [];
+    for (const row of group.rows) {
+      (row.availability.kind === "in_stock" ? inStockRows : otherRows).push(row);
+    }
+
+    const orderedGroup = { ...group, rows: [...inStockRows, ...otherRows] };
+    (group.counts.inStock > 0 ? inStockGroups : otherGroups).push(orderedGroup);
+  }
+
+  return [...inStockGroups, ...otherGroups];
+}
