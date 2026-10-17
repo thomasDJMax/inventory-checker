@@ -1,15 +1,17 @@
-# 果探雷达
+# 库存查询器
 
-独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.0**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
+<img src="docs/branding/app-icon-1024.png" alt="库存查询器应用图标" width="160" height="160" />
+
+独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.1**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
 
 [检查与打包模板](build-templates/README.md)
-[![源码版本: v1.1.0](https://img.shields.io/badge/source-v1.1.0-blue)](package.json)
-[下载与发布记录](https://github.com/thomasDJMax/guotan-radar/releases)
+[![源码版本: v1.1.1](https://img.shields.io/badge/source-v1.1.1-blue)](package.json)
+[下载与发布记录](https://github.com/thomasDJMax/inventory-checker/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
-果探雷达是一款 Apple 直营店取货库存监控工具。选好地区、门店和具体型号后，它会定时检查库存；检测到有货时，可以播放提示音、推送 Bark，并按你的选择打开 Apple 购物袋或商品详情。中国大陆直营店取货还可以开启[自动结账](#自动结账可选)：到货后由应用自己的浏览器走完结账页面，停在「查看订单」页等你确认。
+库存查询器是一款 Apple 直营店取货库存监控工具。选好地区、门店和具体型号后，它会定时检查库存；检测到有货时，可以播放提示音、推送 Bark，并按你的选择打开 Apple 购物袋或商品详情。中国大陆直营店取货还可以开启[自动结账](#自动结账可选)：到货后由应用自己的浏览器走完结账页面，停在「查看订单」页等你确认。
 
-使用 Rust、Tauri 2 和 React 编写，应用名为 **果探雷达**，仓库与主程序名为 `guotan-radar`。本次 Release 仅提供已在本机构建和验证的 **macOS Apple Silicon 安装包**；Intel Mac、Windows 和 Linux 保留源码构建入口，尚未提供这些平台的已验证安装包。
+使用 Rust、Tauri 2 和 React 编写，应用名为 **库存查询器**，仓库名为 `inventory-checker`。为兼容已安装的 1.1.0 版本，内部包名和主程序继续使用 `guotan-radar`，应用标识与数据目录保持不变。本次 Release 仅提供已在本机构建和验证的 **macOS Apple Silicon 安装包**；Intel Mac、Windows 和 Linux 保留源码构建入口，尚未提供这些平台的已验证安装包。
 
 直接上游是 [suversal/apple-store-inventory-monitor](https://github.com/suversal/apple-store-inventory-monitor)，更早承继 [ENCHIGO/apple-pickup-watcher v0.3.2](https://github.com/ENCHIGO/apple-pickup-watcher/tree/v0.3.2) 与 [hteen/apple-store-helper](https://github.com/hteen/apple-store-helper)。保留原始 Git 历史、版权及 GPL-3.0-or-later 许可，来源与修改记录见 [NOTICE](NOTICE)。
 
@@ -17,7 +19,11 @@
 
 [快速开始](#快速开始) · [下载安装](#安装) · [使用方法](#使用方法) · [自动结账](#自动结账可选) · [常见问题](#常见问题) · [从源码运行](#从源码运行) · [反馈问题](#反馈问题)
 
-## 本版修复
+## 本版更新
+
+- 应用由「果探雷达」更名为「库存查询器」，仓库改为 `inventory-checker`，已有配置继续沿用。
+- 换用独立设计的新图标，统一桌面安装包、网页标题图标与应用内品牌标识。
+- 图标更新不改变已有功能、应用标识和用户设置，保留以下功能与界面修复。
 
 - 保留正确的查询间隔和冷却截止时间，读取状态或重复开始不会提前发起下一轮查询。
 - 连接失败支持重试，断开连接释放监听器；旧请求和旧保存结果不会覆盖较新的状态。
@@ -25,7 +31,7 @@
 - 默认窗口采用纵向布局，宽窗口保留双栏，修复表格挤压、空状态偏移和低高度窗口裁切。
 - 保存失败时保留 Bark 与查询间隔草稿，并显示可处理的错误。
 
-完整记录见 [CHANGELOG.md](CHANGELOG.md)。上游旧品牌的宣传图与截图保留在 `docs/promo/`、`docs/screenshots/`，仅作为历史资源，不代表本版界面。
+完整记录见 [CHANGELOG.md](CHANGELOG.md)，新图标的生成提示词保存在 [docs/branding/icon-prompt.txt](docs/branding/icon-prompt.txt)。上游旧品牌的宣传图与截图保留在 `docs/promo/`、`docs/screenshots/`，仅作为历史资源，不代表本版界面。
 
 ## 快速开始
 
@@ -33,7 +39,7 @@
 
 1. 按下方[安装说明](#安装)下载并安装适合自己电脑的版本。
 2. 确认电脑已安装 Google Chrome 或 Microsoft Edge。Linux 也可以使用 PATH 中的 Chromium。Firefox、Safari、Brave 等浏览器目前不能用于库存查询。软件不会读取你平时使用的浏览器资料。
-3. 打开果探雷达。macOS 和 Windows 可能会拦截未经公证或没有开发者证书的应用，处理方法见[安装](#安装)。
+3. 打开库存查询器。macOS 和 Windows 可能会拦截未经公证或没有开发者证书的应用，处理方法见[安装](#安装)。
 4. 如果想在 iPhone 上收到到货通知，先按 [Bark 教程](#bark-从下载到使用)安装并配置 Bark；不需要手机推送可以跳过。
 5. 选择地区和品类，再勾选门店与型号，点击「添加监控」。
 6. 选择提示音、Bark 和「到货后打开」方式，再点一次「测试提醒与跳转」。
@@ -57,33 +63,33 @@ Apple 可能限流或调整接口，库存也可能在提醒后立即变化。�
 
 ## 安装
 
-打开 [果探雷达 Releases](https://github.com/thomasDJMax/guotan-radar/releases)，在 **Assets** 中下载 `guotan-radar_1.1.0_aarch64.dmg`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
+打开 [库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，在 **Assets** 中下载 `inventory-checker_1.1.1_aarch64.dmg`，源码归档为 `inventory-checker_1.1.1_source.zip`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
 
 ### macOS Apple Silicon
 
-1. 打开 `.dmg`，把 `果探雷达.app` 拖进「应用程序」，不要直接在磁盘映像中长期运行。
+1. 打开 `.dmg`，把 `库存查询器.app` 拖进「应用程序」，不要直接在磁盘映像中长期运行。
 2. 应用使用完整的 ad-hoc 签名，未使用 Developer ID 证书且未经过 Apple 公证。如果系统提示无法验证开发者，可在 Finder 中按住 Control 点击应用并选择「打开」，或在「系统设置 → 隐私与安全性」确认应用来源后选择「仍要打开」。
 3. 对照同一 Release 的 `SHA256SUMS.txt` 校验安装包：
 
 ```bash
-shasum -a 256 guotan-radar_1.1.0_aarch64.dmg
+shasum -a 256 inventory-checker_1.1.1_aarch64.dmg
 ```
 
 ### 其他平台自行构建
 
 源码保留 Intel Mac、Windows 和 Linux 支持；本次没有发布或完成这些平台的安装验证。仓库中的[检查与打包模板](build-templates/README.md)目前没有启用，不能视为已通过的跨平台验证。
 
-Linux 打包使用 ASCII 名称 `guotan-radar`，桌面显示名称仍为「果探雷达」。若自行构建 `.deb`，示例安装命令如下（Ubuntu 24.04 构建的包需要 glibc 2.39 或更新版本）：
+Linux 打包继续使用 ASCII 名称 `guotan-radar`，桌面显示名称为「库存查询器」。若自行构建 `.deb`，示例安装命令如下（Ubuntu 24.04 构建的包需要 glibc 2.39 或更新版本）：
 
 ```bash
-sudo apt install "./guotan-radar_1.1.0_amd64.deb"
+sudo apt install "./inventory-checker_1.1.1_amd64.deb"
 ```
 
 自行构建 AppImage 后可执行：
 
 ```bash
-chmod +x "./guotan-radar_1.1.0_amd64.AppImage"
-"./guotan-radar_1.1.0_amd64.AppImage"
+chmod +x "./inventory-checker_1.1.1_amd64.AppImage"
+"./inventory-checker_1.1.1_amd64.AppImage"
 ```
 
 AppImage 需要 FUSE 2；Ubuntu 24.04 可安装 `libfuse2t64`，或使用 `--appimage-extract-and-run`。Windows 自行构建会生成 NSIS `*-setup.exe`，没有操作系统开发者签名。Linux 需要另行安装 Chrome、Edge 或 PATH 中的 Chromium。
@@ -116,10 +122,10 @@ AppImage 需要 FUSE 2；Ubuntu 24.04 可安装 `libfuse2t64`，或使用 `--app
 ### 第一步：打开应用并做好准备
 
 1. 先正常打开一次 Chrome 或 Edge，确认它能访问 Apple 官网；Linux 也可以使用 Chromium。
-2. 再打开果探雷达，等待界面显示地区、品类和门店选项。
+2. 再打开库存查询器，等待界面显示地区、品类和门店选项。
 3. 如果需要手机通知，先在 iPhone 上配置 Bark；如果只需要电脑播放提示音，可以跳过 Bark。
 
-果探雷达必须在电脑上保持运行。Bark 只负责把通知送到 iPhone，不能代替电脑查询库存。电脑睡眠、关机或彻底退出果探雷达后，监控都会停止。
+库存查询器必须在电脑上保持运行。Bark 只负责把通知送到 iPhone，不能代替电脑查询库存。电脑睡眠、关机或彻底退出库存查询器后，监控都会停止。
 
 ### 第二步：添加要监控的商品
 
@@ -156,7 +162,7 @@ Bark 是一款把自定义通知推送到 iPhone 或 iPad 的独立应用。它�
 
 #### 2. 找到自己的 Bark 推送地址
 
-打开 Bark 首页，找到并复制它显示的推送地址或测试 URL。果探雷达需要的是“服务器地址 + 设备 Key”，通常形如：
+打开 Bark 首页，找到并复制它显示的推送地址或测试 URL。库存查询器需要的是“服务器地址 + 设备 Key”，通常形如：
 
 ```text
 https://api.day.app/你的设备Key
@@ -168,13 +174,13 @@ https://api.day.app/你的设备Key
 https://api.day.app/你的设备Key/这里改成你自己的推送内容
 ```
 
-只把前半段 `https://api.day.app/你的设备Key` 填入果探雷达，不要把最后的测试文字一起粘贴。使用自建 Bark 服务器时规则相同：地址必须以 `http://` 或 `https://` 开头，并且路径中包含设备 Key。
+只把前半段 `https://api.day.app/你的设备Key` 填入库存查询器，不要把最后的测试文字一起粘贴。使用自建 Bark 服务器时规则相同：地址必须以 `http://` 或 `https://` 开头，并且路径中包含设备 Key。
 
 设备 Key 相当于这台设备的推送凭证。不要把真实地址发到群聊、截图、公开 Issue 或代码仓库中。
 
-#### 3. 填入果探雷达
+#### 3. 填入库存查询器
 
-1. 回到电脑上的果探雷达。
+1. 回到电脑上的库存查询器。
 2. 在右侧「默认 Bark 推送」输入框粘贴地址。
 3. 点击输入框外的空白位置，让设置保存。
 4. 如果所有型号都推送到同一台手机，到这里就配置完成了。
@@ -186,7 +192,7 @@ https://api.day.app/你的设备Key/这里改成你自己的推送内容
 点击「测试提醒与跳转」，然后检查：
 
 1. iPhone 是否收到标题为“提醒测试（不代表有货）”的通知。
-2. 果探雷达活动日志是否显示 Bark 已执行，还是给出了失败原因。
+2. 库存查询器活动日志是否显示 Bark 已执行，还是给出了失败原因。
 3. 如果配置了型号专属 Bark，测试会使用监控列表中第一个型号的地址；因此测试专属地址前，应先把对应型号添加到列表。
 
 测试按钮不会查询 Apple 库存，也不代表商品有货。只有手机实际收到通知，才能确认 Bark 链路已经可用。
@@ -259,7 +265,7 @@ Apple 返回 `403`、`541` 或 `429` 时，处理方式取决于「查询线路�
 2. 展开右侧「自动结账」，点击「打开下单浏览器」。
 3. 在打开的窗口里登录 Apple 账户，把要买的那一件商品加入购物袋，数量为 1，并清掉购物袋里的其他商品。
 4. **手动走一次结账流程**，一直走到「查看订单」页，不必下单。这一步让 Apple 记住你的取货联系人等信息，也能提前发现账户是否需要额外验证。
-5. 回到果探雷达，按下一节填写设置。
+5. 回到库存查询器，按下一节填写设置。
 6. 点击「试跑到查看订单页」。试跑不看库存，直接用「要下单的商品」和它第一条监控项的门店走一遍流程，**无论设置如何都不会提交订单**。活动日志会显示每一步的进展和结果。
 7. 试跑通过后，打开「到货后自动结账」，再点「开始监控」。
 
@@ -357,7 +363,7 @@ Clash 节点轮换的具体规则：
 - 所有节点都不可用时，下一轮等到最早恢复的节点，界面显示「冷却中」和倒计时。
 - 可以在「当前节点」中手动指定节点，手动指定会解除该节点的冷却；之后被拒时仍会自动切换。
 
-两种 Clash 模式都**只切换果探雷达专用的策略组，只让查询浏览器使用专用端口**，电脑上其他软件使用的节点不受影响。
+两种 Clash 模式都**只切换库存查询器专用的策略组，只让查询浏览器使用专用端口**，电脑上其他软件使用的节点不受影响。
 
 #### 配置 Clash（以 Clash Verge Rev 为例）
 
@@ -367,10 +373,10 @@ Clash 节点轮换的具体规则：
 
 1. 打开 Clash Verge，进入「设置」→「Clash 设置」→「外部控制」。
 2. 打开「启用外部控制器」，监听地址填 `127.0.0.1:9097`。
-3. 设置一个「API 访问密钥」并记下来，稍后要填到果探雷达里。
+3. 设置一个「API 访问密钥」并记下来，稍后要填到库存查询器里。
 4. 点「保存」。
 
-**第二步：添加果探雷达专用的扩展脚本**
+**第二步：添加库存查询器专用的扩展脚本**
 
 1. 进入「订阅」页面，在页面底部找到 **「全局扩展脚本」**（右上角标着 `Script`）。
 2. 右键点击它，选择「编辑文件」。
@@ -379,9 +385,9 @@ Clash 节点轮换的具体规则：
 5. 保存。如果「代理」页面没有刷新，在当前使用的订阅卡片上点一下刷新。
 
 ```javascript
-// Clash Verge「全局扩展脚本」：节点只供果探雷达的专用端口使用，不影响电脑本身的节点
+// Clash Verge「全局扩展脚本」：节点只供库存查询器的专用端口使用，不影响电脑本身的节点
 const APW_PREFIX = "APW·";
-const APW_GROUP = "果探雷达";
+const APW_GROUP = "库存查询器";
 const APW_SUBSCRIPTIONS = {
   机场1: "机场订阅地址",
 };
@@ -424,7 +430,7 @@ function main(config, profileName) {
 }
 ```
 
-脚本做了三件事：把订阅节点加上 `APW·机场名|` 前缀，放进新建的「果探雷达」策略组；让原有策略组排除这些节点，电脑本身的分流保持不变；开一个只转发到「果探雷达」组的本机端口 `7899`。
+脚本做了三件事：把订阅节点加上 `APW·机场名|` 前缀，放进新建的「库存查询器」策略组；让原有策略组排除这些节点，电脑本身的分流保持不变；开一个只转发到「库存查询器」组的本机端口 `7899`。
 
 > 不要把这些配置写进「全局扩展覆写配置」（Merge）。新版 Clash Verge 的 Merge 不支持追加策略组，写成 `proxy-groups` 还会替换原有的全部策略组，导致电脑分流异常。
 >
@@ -434,10 +440,10 @@ function main(config, profileName) {
 
 在 Clash Verge 的「代理」页面检查：
 
-- 出现了名为「果探雷达」的策略组，里面有 DIRECT 和带 `APW·` 前缀的节点。
+- 出现了名为「库存查询器」的策略组，里面有 DIRECT 和带 `APW·` 前缀的节点。
 - 你平时使用的策略组（例如「节点选择」「自动选择」）中**没有**出现 `APW·` 开头的节点。如果出现了，说明脚本没有生效，或者使用了旧版写法，请重新按第二步操作。
 
-**第四步：在果探雷达中填写**
+**第四步：在库存查询器中填写**
 
 1. 展开右侧「查询线路」，出口方式选择「Clash 节点轮换」或「指定节点」。
 2. 按下表填写：
@@ -447,7 +453,7 @@ function main(config, profileName) {
    | 控制接口 | 第一步的监听地址，例如 `127.0.0.1:9097`，可直接粘贴，程序会自动补上 `http://` |
    | 密钥 | 第一步设置的 API 访问密钥 |
    | 专用端口 | `7899`（与脚本中的 `port` 一致） |
-   | 策略组 | `果探雷达`（与脚本中的 `APW_GROUP` 一致） |
+   | 策略组 | `库存查询器`（与脚本中的 `APW_GROUP` 一致） |
    | 节点关键词 | 可留空；只想用部分节点时填关键词，用竖线分隔，例如 `香港\|台湾\|日本` |
 
 3. 点「检查线路」。正常情况下会显示内核版本、可用节点数量和「端口 7899 可连接」。这一步只访问本机的 Clash，不会请求 Apple。
@@ -470,7 +476,7 @@ function main(config, profileName) {
 只要客户端使用 mihomo 内核，并且能满足以下三点，就可以使用：
 
 1. 开启外部控制器（`external-controller`），并设置密钥（`secret`）。
-2. 有一个 `select` 类型的策略组，只供果探雷达使用。
+2. 有一个 `select` 类型的策略组，只供库存查询器使用。
 3. 有一个 `listeners` 端口，`proxy` 指向这个策略组。
 
 直接编辑 mihomo 配置文件时，可参考：
@@ -488,7 +494,7 @@ proxy-providers:
       additional-prefix: "APW·机场1|"
 proxy-groups:
   # 保留原有策略组，只在末尾追加这一个；原有使用 include-all 的组需加上 exclude-filter: "^APW·"
-  - name: 果探雷达
+  - name: 库存查询器
     type: select
     proxies: [DIRECT]
     use: [apw-airport1]
@@ -497,7 +503,7 @@ listeners:
     type: mixed
     port: 7899
     listen: 127.0.0.1
-    proxy: 果探雷达
+    proxy: 库存查询器
 ```
 
 #### Clash 配置常见问题
@@ -506,15 +512,15 @@ listeners:
 | --- | --- |
 | 无法连接 Clash 控制接口 | 外部控制器没有开启，或地址、端口与设置不一致。按第一步检查 |
 | Clash 控制接口拒绝访问，请检查密钥 | 密钥填错，或 Clash 中修改了密钥 |
-| Clash 中没有名为「果探雷达」的策略组 | 扩展脚本没有生效：确认写在「全局扩展脚本」而不是 Merge，已保存，并刷新了订阅 |
-| 「果探雷达」的类型不是 select | 策略组类型需要是 `select`，程序才能切换节点 |
-| 端口 7899 无法连接 / 无法连接 Clash 专用端口 | 脚本中的 `listeners` 没有生效，或端口被占用；确认脚本已保存，必要时换一个端口，并同步修改果探雷达中的「专用端口」 |
+| Clash 中没有名为「库存查询器」的策略组 | 扩展脚本没有生效：确认写在「全局扩展脚本」而不是 Merge，已保存，并刷新了订阅 |
+| 「库存查询器」的类型不是 select | 策略组类型需要是 `select`，程序才能切换节点 |
+| 端口 7899 无法连接 / 无法连接 Clash 专用端口 | 脚本中的 `listeners` 没有生效，或端口被占用；确认脚本已保存，必要时换一个端口，并同步修改库存查询器中的「专用端口」 |
 | 可用节点为 0，或某个机场没有节点 | 订阅地址填错，或该订阅在国内无法直接下载；到 Clash 的日志中查看订阅加载错误 |
 | 电脑平时用的策略组里出现了 `APW·` 节点 | 使用了旧版配置或 Merge 写法，请按第二步改用本节的脚本 |
 
 ### 应用更新
 
-点击「下载更新」会在浏览器中打开[果探雷达 Releases](https://github.com/thomasDJMax/guotan-radar/releases)，请核对版本和校验值后手动下载、退出旧应用并替换安装。设置保存在用户配置目录，替换应用包不会删除设置。
+点击「下载更新」会在浏览器中打开[库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，请核对版本和校验值后手动下载、退出旧应用并替换安装。设置保存在用户配置目录，替换应用包不会删除设置。
 
 本分支没有配置 Tauri 更新签名密钥，不沿用上游的更新公钥或更新地址，也不生成 `latest.json`。当前版本关闭内置下载与安装更新流程；macOS 应用包的 ad-hoc 签名用于校验包结构，和 Tauri 更新签名是不同用途。
 
@@ -543,9 +549,9 @@ listeners:
 
 ## 设置与数据
 
-本版应用标识为 `com.thomasdjmax.guotan-radar`。为保留果到雷达已有监控、目录缓存与应用专属浏览器会话，**内部数据目录继续使用 `apple-store-inventory-monitor`**，不会因更名另建一份空配置；与原版共用以下设置文件。请完全退出旧版后再运行本版，避免两个程序同时写入同一配置。
+本版沿用 1.1.0「果探雷达」的应用标识 `com.thomasdjmax.guotan-radar`，包名和主程序名仍为 `guotan-radar`。为保留果到雷达已有监控、目录缓存与应用专属浏览器会话，**内部数据目录继续使用 `apple-store-inventory-monitor`**，不会因更名另建一份空配置；与原版共用以下设置文件。请完全退出旧版后再运行本版，避免两个程序同时写入同一配置。
 
-既有 Clash 策略组名称沿用保存值，不因更名自动修改；新配置及本 README 的新脚本示例使用「果探雷达」。如果你已有「果到雷达」组，保持应用中的策略组设置与 Clash 中的实际名称一致即可。
+既有 Clash 策略组名称沿用保存值，不因更名自动修改；新配置及本 README 的新脚本示例使用「库存查询器」。如果你已有「果探雷达」或「果到雷达」组，保持应用中的策略组设置与 Clash 中的实际名称一致即可。
 
 旧格式 `apple-pickup-watcher` 设置仍由既有迁移逻辑读取，旧文件不会被删除。
 
@@ -567,7 +573,7 @@ listeners:
 
 ### 找不到安装包
 
-先确认打开的是本仓库的 [Releases](https://github.com/thomasDJMax/guotan-radar/releases)，再展开对应版本的 Assets。只有源码标签或 Actions 构建记录，不代表安装包已经公开；草稿 Release 对普通访问者不可见。请等待正式发布，或按[从源码运行](#从源码运行)自行构建。
+先确认打开的是本仓库的 [Releases](https://github.com/thomasDJMax/inventory-checker/releases)，再展开对应版本的 Assets。只有源码标签或 Actions 构建记录，不代表安装包已经公开；草稿 Release 对普通访问者不可见。请等待正式发布，或按[从源码运行](#从源码运行)自行构建。
 
 ### 出现 HTTP 541
 
@@ -595,16 +601,16 @@ listeners:
 
 最近一次启动诊断记录在设置目录下的 `chromium-profile-v1/browser-startup.log`（查询）或 `checkout-profile-v1/browser-startup.log`（下单）。日志只在本机保存，并限制启动输出大小；不会自动删除浏览器资料、清空登录状态或上传诊断。
 
-这表示果探雷达没有成功建立用于查询库存的临时浏览器会话，不等同于商品无货。请依次检查：
+这表示库存查询器没有成功建立用于查询库存的临时浏览器会话，不等同于商品无货。请依次检查：
 
 1. Windows 是否安装了 Chrome 或 Edge；macOS 是否把 Chrome 或 Edge 放在系统的「应用程序」目录；Linux 是否能从终端运行 Chrome、Edge 或 Chromium。
 2. Firefox、Safari、Brave、360 浏览器等目前不能替代 Chrome、Edge 或 Chromium。
 3. 把受支持的浏览器升级到当前版本，手动打开一次并确认可以访问 Apple 官网。
-4. 完全退出果探雷达后重新打开。如果仍然立即失败，再检查安全软件是否阻止了浏览器的无界面进程。
+4. 完全退出库存查询器后重新打开。如果仍然立即失败，再检查安全软件是否阻止了浏览器的无界面进程。
 
 ### 测试提醒没有声音或 Bark 推送
 
-提示音请检查应用内开关、系统音量和音频输出设备。Bark 请先确认 Bark 自己的测试 URL 能让手机收到通知，再检查果探雷达中填写的地址是否只包含服务器和设备 Key、iPhone 是否允许 Bark 通知，以及专注模式是否隐藏了普通通知。最后查看活动日志中的 Bark 失败原因。两条提醒渠道独立，提醒失败不会改变库存判断。
+提示音请检查应用内开关、系统音量和音频输出设备。Bark 请先确认 Bark 自己的测试 URL 能让手机收到通知，再检查库存查询器中填写的地址是否只包含服务器和设备 Key、iPhone 是否允许 Bark 通知，以及专注模式是否隐藏了普通通知。最后查看活动日志中的 Bark 失败原因。两条提醒渠道独立，提醒失败不会改变库存判断。
 
 ### 自动结账为什么要再登录一次 Apple 账户
 
@@ -642,17 +648,17 @@ listeners:
 
 ## 上游功能与本分支修改
 
-本分支直接基于 suversal 果到雷达 `v1.0.22`（`7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9`）。Chromium 查询、多个产品品类、多门店监控、提示音、Bark、Clash 查询线路和可选自动结账均承自上游，不作为果探雷达新增功能。
+本分支直接基于 suversal 果到雷达 `v1.0.22`（`7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9`）。Chromium 查询、多个产品品类、多门店监控、提示音、Bark、Clash 查询线路和可选自动结账均承自上游，不作为库存查询器新增功能。
 
-本轮新增的是查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识和手动更新入口。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.0` 与 `1.0.23-local.1`。
+本分支新增了查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识、手动更新入口和新图标。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.1`、`1.1.0` 与 `1.0.23-local.1`。
 
 ## Apple 查询会话
 
 Apple 当前商品页会先完成浏览器环境校验，再请求库存接口。普通 HTTP 客户端即使带上常见请求头和购物袋 Cookie，也可能收到 `HTTP 541`。
 
-果探雷达会在后台启动一个独立的 Chromium 会话（Chrome、Edge，或 Linux 上的 Chromium）：
+库存查询器会在后台启动一个独立的 Chromium 会话（Chrome、Edge，或 Linux 上的 Chromium）：
 
-1. 使用果探雷达自己的持久浏览器资料目录，不复用个人浏览器资料。
+1. 使用库存查询器自己的持久浏览器资料目录，不复用个人浏览器资料。
    浏览器以无头模式运行，不显示窗口或 Dock 图标；UA、Client Hints、屏幕尺寸和语言按本机真实浏览器版本修正，去掉无头模式的标记。
 2. 打开当前地区的 Apple 正式购买页，等待页面校验完成。
 3. 在同一页面和同一会话中请求库存。
@@ -699,8 +705,8 @@ sudo apt install -y \
 macOS / Linux：
 
 ```bash
-git clone https://github.com/thomasDJMax/guotan-radar.git
-cd guotan-radar
+git clone https://github.com/thomasDJMax/inventory-checker.git
+cd inventory-checker
 pnpm install
 source "$HOME/.cargo/env"
 pnpm tauri dev
@@ -709,8 +715,8 @@ pnpm tauri dev
 Windows PowerShell（安装 Rust 后请重新打开终端）：
 
 ```powershell
-git clone https://github.com/thomasDJMax/guotan-radar.git
-cd guotan-radar
+git clone https://github.com/thomasDJMax/inventory-checker.git
+cd inventory-checker
 pnpm install
 cargo --version
 pnpm tauri dev
@@ -738,7 +744,7 @@ cargo test -p guotan-radar "chromium_fetcher::tests::真实chromium会话连续�
 
 这条测试会复用同一浏览器会话，连续检查上海四家门店两轮。它用于验证页面校验、会话复用、请求节流、响应解析，以及第一家门店有货后仍继续查询其他门店。
 
-自动结账另有一条真实流程测试，会在下单浏览器中从购物袋走到「查看订单」页，**不会提交订单**。运行前需要完全退出果探雷达（下单浏览器的资料目录不能同时被两个进程使用），并且已经在下单浏览器里登录、把对应商品加入购物袋：
+自动结账另有一条真实流程测试，会在下单浏览器中从购物袋走到「查看订单」页，**不会提交订单**。运行前需要完全退出库存查询器（下单浏览器的资料目录不能同时被两个进程使用），并且已经在下单浏览器里登录、把对应商品加入购物袋：
 
 ```text
 APW_LIVE_PRODUCT="购物袋里的商品名称" APW_LIVE_STORE=R678 APW_LIVE_ID_SUFFIX=1234 \
@@ -788,9 +794,9 @@ pnpm tauri build --ci -- --locked
 
 当前 GitHub OAuth 授权没有 `workflow` scope，因此本仓库**未启用 GitHub Actions**，也没有宣称自动 CI 已运行。为保留构建方法，CI 与打包配置作为普通 YAML 模板放在 [build-templates/](build-templates/README.md)，不会自动执行；有相应仓库权限和授权时，可按模板说明自行复制到 `.github/workflows/`。
 
-[打包模板](build-templates/packages.yml)启用后只允许手动 `workflow_dispatch`，在 macOS、Windows 和 Linux runner 上原生构建，完成签名或安装检查后上传 Actions artifacts；它不会创建 Release 或更新清单。`1.1.0` 是本机验证后发布的版本，当前公开 Release 只包含本机验证通过的 macOS Apple Silicon 包。
+[打包模板](build-templates/packages.yml)启用后只允许手动 `workflow_dispatch`，在 macOS、Windows 和 Linux runner 上原生构建，完成签名或安装检查后上传 Actions artifacts；它不会创建 Release 或更新清单。`1.1.0` 是本机验证后发布的版本，`1.1.1` 沿用本机验证后手动发布的流程，当前公开 Release 只包含本机验证通过的 macOS Apple Silicon 包。
 
-发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.0`）一致，并在对应平台验证安装包后再发布。
+发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.1`）一致，并在对应平台验证安装包后再发布。
 
 ## 代码结构
 
@@ -830,7 +836,7 @@ src/
 
 ## 来源与许可
 
-本仓库「果探雷达」直接基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22)，由 thomasDJMax 继续维护，保留了上游 Git 历史、版权、历史修改声明与资源归属。
+本仓库「库存查询器」直接基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22)，由 thomasDJMax 继续维护，保留了上游 Git 历史、版权、历史修改声明与资源归属。
 
 果到雷达基于 [ENCHIGO/apple-pickup-watcher v0.3.2](https://github.com/ENCHIGO/apple-pickup-watcher/tree/v0.3.2) 继续开发；后者是 [hteen/apple-store-helper](https://github.com/hteen/apple-store-helper) 的 GPL-3.0 重写版本。更名不改变派生关系，完整来源、承继资源和逐项修改说明见 [NOTICE](NOTICE)。
 
@@ -838,7 +844,7 @@ src/
 
 ## 反馈问题
 
-请在本仓库的 [Issues](https://github.com/thomasDJMax/guotan-radar/issues) 提交问题，并尽量附上：
+请在本仓库的 [Issues](https://github.com/thomasDJMax/inventory-checker/issues) 提交问题，并尽量附上：
 
 - 操作系统与芯片架构，例如 macOS 26 / Apple M4；
 - 应用版本；

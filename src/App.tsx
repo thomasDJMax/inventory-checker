@@ -756,12 +756,12 @@ export default function App() {
           <header className="surface-panel flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:gap-5 sm:px-5">
             <div className="flex min-w-0 items-center gap-3.5">
               <div className="brand-mark" aria-hidden="true">
-                <Radar className="size-5" strokeWidth={1.8} />
+                <img src="/icon.png" alt="" width={48} height={48} draggable={false} className="size-full object-contain" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h1 className="truncate text-lg font-semibold tracking-[-0.02em]">
-                    果探雷达
+                    库存查询器
                   </h1>
                   <Badge variant="outline" className="hidden border-primary/20 bg-primary/8 text-primary sm:inline-flex">
                     LIVE
@@ -799,7 +799,7 @@ export default function App() {
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-xl" aria-label="在 GitHub 下载果探雷达更新" onClick={() => void openReleasePage()}>
+                  <Button variant="ghost" size="icon" className="rounded-xl" aria-label="在 GitHub 下载库存查询器更新" onClick={() => void openReleasePage()}>
                     <Download aria-hidden="true" />
                   </Button>
                 </TooltipTrigger>
@@ -872,7 +872,7 @@ export default function App() {
                 <ol className="list-decimal space-y-1 pl-5">
                   {describeBrowserRecovery(browserFailure).map((step) => <li key={step}>{step}</li>)}
                 </ol>
-                <span className="text-xs">仍无法恢复时，请把“查看详情”中的错误信息、果探雷达版本和浏览器版本通过项目的 GitHub Issues 反馈。{ui.running ? "运行中仍会按设置的间隔尝试连接。" : "当前监控已暂停。"}</span>
+                <span className="text-xs">仍无法恢复时，请把“查看详情”中的错误信息、库存查询器版本和浏览器版本通过项目的 GitHub Issues 反馈。{ui.running ? "运行中仍会按设置的间隔尝试连接。" : "当前监控已暂停。"}</span>
                 <div className="flex flex-wrap items-center gap-4">
                   <Button variant="outline" size="sm" onClick={() => void onRetryNow()} disabled={isRetrying} aria-busy={isRetrying}>
                     <RefreshCw className={isRetrying ? "animate-spin motion-reduce:animate-none" : undefined} aria-hidden="true" />

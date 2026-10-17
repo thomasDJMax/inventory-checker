@@ -85,7 +85,7 @@ jobs:
             grep -q "Identifier=com.thomasdjmax.guotan-radar" <<< "$signature_info"
             grep -q "Signature=adhoc" <<< "$signature_info"
           }
-          verify_app "target/release/bundle/macos/果探雷达.app"
+          verify_app "target/release/bundle/macos/库存查询器.app"
           dmg_path="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$dmg_path"
           hdiutil verify "$dmg_path"
@@ -96,7 +96,7 @@ jobs:
           }
           trap cleanup EXIT
           hdiutil attach -readonly -nobrowse -mountpoint "$mount_path" "$dmg_path" >/dev/null
-          verify_app "$mount_path/果探雷达.app"
+          verify_app "$mount_path/库存查询器.app"
 
       - name: 验证并安装 Linux 发布包
         if: runner.os == 'Linux'
@@ -129,7 +129,7 @@ jobs:
           $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "NSIS 安装失败：$($install.ExitCode)" }
           $app = Get-ChildItem $installDir -Filter 'guotan-radar.exe' -Recurse | Select-Object -First 1
-          if (-not $app) { throw '安装完成后没有找到果探雷达主程序' }
+          if (-not $app) { throw '安装完成后没有找到库存查询器主程序' }
           $running = Start-Process -FilePath $app.FullName -PassThru
           try {
             Start-Sleep -Seconds 8
@@ -148,17 +148,17 @@ jobs:
           version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
           if [ "$RUNNER_OS" = "macOS" ]; then
             dmg_path="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
-            cp "$dmg_path" "release-assets/guotan-radar_${version}_${PACKAGE_ARCH}.dmg"
+            cp "$dmg_path" "release-assets/inventory-checker_${version}_${PACKAGE_ARCH}.dmg"
           elif [ "$RUNNER_OS" = "Windows" ]; then
             installer_path="$(find target/release/bundle/nsis -maxdepth 1 -name '*.exe' -print -quit)"
-            cp "$installer_path" "release-assets/guotan-radar_${version}_${PACKAGE_ARCH}-setup.exe"
+            cp "$installer_path" "release-assets/inventory-checker_${version}_${PACKAGE_ARCH}-setup.exe"
           else
             deb_path="$(find target/release/bundle/deb -maxdepth 1 -name '*.deb' -print -quit)"
             rpm_path="$(find target/release/bundle/rpm -maxdepth 1 -name '*.rpm' -print -quit)"
             appimage_path="$(find target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' -print -quit)"
-            cp "$deb_path" "release-assets/guotan-radar_${version}_${PACKAGE_ARCH}.deb"
-            cp "$rpm_path" "release-assets/guotan-radar_${version}_${PACKAGE_ARCH}.rpm"
-            cp "$appimage_path" "release-assets/guotan-radar_${version}_${PACKAGE_ARCH}.AppImage"
+            cp "$deb_path" "release-assets/inventory-checker_${version}_${PACKAGE_ARCH}.deb"
+            cp "$rpm_path" "release-assets/inventory-checker_${version}_${PACKAGE_ARCH}.rpm"
+            cp "$appimage_path" "release-assets/inventory-checker_${version}_${PACKAGE_ARCH}.AppImage"
           fi
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
@@ -172,7 +172,7 @@ jobs:
       - name: 上传已验证的安装包（仅 Actions artifact）
         uses: actions/upload-artifact@v4
         with:
-          name: guotan-radar-${{ runner.os }}-${{ matrix.arch }}
+          name: inventory-checker-${{ runner.os }}-${{ matrix.arch }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 14

@@ -105,7 +105,7 @@ fn 样例设置() -> Settings {
             clash: ClashSettings {
                 controller: "http://127.0.0.1:9097".into(),
                 secret: "s3cret".into(),
-                group: "果探雷达".into(),
+                group: "库存查询器".into(),
                 proxy_port: 7899,
                 node_filter: "香港|日本".into(),
                 pinned_node: "DIRECT".into(),
@@ -605,7 +605,7 @@ fn 设置的线上格式是小驼峰() {
             "clash": {
                 "controller": "http://127.0.0.1:9097",
                 "secret": "s3cret",
-                "group": "果探雷达",
+                "group": "库存查询器",
                 "proxyPort": 7899,
                 "nodeFilter": "香港|日本",
                 "pinnedNode": "DIRECT"
@@ -696,7 +696,7 @@ fn 线路设置规范化去掉空白与控制地址结尾斜杠() {
             clash: ClashSettings {
                 controller: "  http://127.0.0.1:9097/ ".into(),
                 secret: " key ".into(),
-                group: " 果探雷达 ".into(),
+                group: " 库存查询器 ".into(),
                 proxy_port: 7899,
                 node_filter: " 香港|日本 ".into(),
                 pinned_node: "  ".into(),
@@ -708,7 +708,7 @@ fn 线路设置规范化去掉空白与控制地址结尾斜杠() {
     let clash = &settings.network.clash;
     assert_eq!(clash.controller, "http://127.0.0.1:9097");
     assert_eq!(clash.secret, "key");
-    assert_eq!(clash.group, "果探雷达");
+    assert_eq!(clash.group, "库存查询器");
     assert_eq!(clash.node_filter, "香港|日本");
     assert_eq!(clash.pinned_node, "DIRECT", "空的指定节点回到 DIRECT");
 }

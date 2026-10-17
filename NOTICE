@@ -2,17 +2,17 @@
 NOTICE — 来源、版权与修改声明
 ================================================================================
 
-本项目「果探雷达」（guotan-radar）直接基于：
+本项目「库存查询器」（inventory-checker，原名「果探雷达」）直接基于：
 
     直接上游名称  果到雷达 (apple-store-inventory-monitor)
     直接上游地址  https://github.com/suversal/apple-store-inventory-monitor
     上游维护者    suversal <https://github.com/suversal>
     起始版本      v1.0.22（提交 7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9）
     上游许可      GNU General Public License, version 3 or later
-    本分支地址    https://github.com/thomasDJMax/guotan-radar
+    本分支地址    https://github.com/thomasDJMax/inventory-checker
 
 下文保留果到雷达原始来源、版权与修改声明；其中「本项目」等历史表述指对应
-历史版本。果探雷达在其基础上继续修改，完整 Git 历史与 LICENSE 一并保留。
+历史版本。本分支在其基础上继续修改，完整 Git 历史与 LICENSE 一并保留。
 
 果到雷达原始来源声明：
 
@@ -230,3 +230,11 @@ Tauri 签名更新并移除上游公钥，改为手动打开本分支 Releases�
 保留，当前没有启用 GitHub Actions；打包模板启用后仅手动构建验证，不自动
 发布 Release 或生成更新清单。原图标、声音、目录数据
 和其余承继代码的来源与许可继续保留；本分支不代表上游或 Apple 官方发布。
+
+
+库存查询器更名与图标更新声明（2026-10-17，版本 1.1.1）：对外名称由「果探雷达」
+改为「库存查询器」，仓库改为 inventory-checker；内部包名、主程序、应用标识和
+数据目录保持兼容。本分支使用 AI 生成工具独立制作新图标，并用于桌面图标、网页
+标题图标和应用内品牌标识。新图标原稿位于 assets/icon-source.png，1024 像素主图
+和生成提示词保存在 docs/branding/；这是本分支新增的视觉资源。上游旧图标、宣传图及截图等历史资源的来源与归属不变，
+不将其声称为本分支创作。

@@ -1,0 +1,12 @@
+Inventory Checker / 库存查询器 1.1.1 app icon
+Generated: 2026-10-17
+Tool: built-in image_gen
+Intent: new logo-brand generation, transparent background
+Original output: assets/icon-source.png (1254 x 1254 RGBA)
+Desktop master and public preview: assets/icon.png and docs/branding/app-icon-1024.png
+Resizing and platform format conversion: Tauri CLI icon generator
+
+Naming note: generated under the working name Guotan Radar; the artwork contains no text. Final product name: 库存查询器.
+
+Prompt:
+Use case: logo-brand. Create one finished original application icon for an independent macOS app named Guotan Radar (果探雷达), an Apple Store inventory monitor. This is a new visual identity, not an edit or a mockup. Square canvas, true transparent background outside the icon, no text anywhere. A single premium softly beveled macOS squircle tile in a vivid cobalt-to-deep-indigo gradient, centered with approximately 8% transparent safety margin on all four sides and only a restrained soft contact shadow. Within the tile, design a bold simple abstract fruit-and-radar emblem: a small rounded golden-apricot fruit with a mint-green leaf, surrounded by one clean thick luminous ivory radar orbit that opens near the upper right, and a single small bright cyan detection dot at that opening. The fruit is a generic original round fruit with no bite or Apple logo silhouette. Make the orbit and fruit feel like one balanced recognizable symbol. High contrast, very legible at 32px, very few elements, generous breathing room, crisp precise edges, polished gently dimensional rendering with subtle light from upper left. The main symbol occupies roughly 64% of the tile. Retain a calm clean blue software aesthetic; the warm golden fruit is the focal point. No lettering, no initials, no watermark, no device, no extra icons, no gridded radar background, no thin complicated details, no multicolor rainbow, no white rectangular background, no presentation layout. Deliver exactly one isolated app icon, front facing, square 1024x1024 or higher.

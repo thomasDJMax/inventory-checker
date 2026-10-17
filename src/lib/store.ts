@@ -88,7 +88,7 @@ const DEFAULT_SETTINGS: Settings = {
     clash: {
       controller: "http://127.0.0.1:9097",
       secret: "",
-      group: "果探雷达",
+      group: "库存查询器",
       proxyPort: 7899,
       nodeFilter: "",
       pinnedNode: "DIRECT",
@@ -700,7 +700,7 @@ export async function openTargetProduct(target: Target): Promise<void> {
 /** 打开本项目的完整安装包下载页。 */
 export async function openReleasePage(): Promise<void> {
   try {
-    await openUrl("https://github.com/thomasDJMax/guotan-radar/releases/latest");
+    await openUrl("https://github.com/thomasDJMax/inventory-checker/releases/latest");
   } catch (err) {
     pushLog(`无法打开下载页：${String(err)}`);
   }
@@ -709,7 +709,7 @@ export async function openReleasePage(): Promise<void> {
 /** 打开本派生项目的源码与问题反馈页。 */
 export async function openProjectPage(): Promise<void> {
   try {
-    await openUrl("https://github.com/thomasDJMax/guotan-radar");
+    await openUrl("https://github.com/thomasDJMax/inventory-checker");
   } catch (err) {
     pushLog(`无法打开 GitHub 项目页：${String(err)}`);
   }

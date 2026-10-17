@@ -175,7 +175,7 @@ fn reclaim_orphaned_profile_process(profile_dir: &Path) -> Result<(), ApiError> 
     }
     if parent_pid != Some(1) {
         return Err(ApiError::Transport(
-            "另一个果探雷达实例正在使用专属 Chromium 会话，本轮未重复打开浏览器".into(),
+            "另一个库存查询器实例正在使用专属 Chromium 会话，本轮未重复打开浏览器".into(),
         ));
     }
 
@@ -1906,7 +1906,7 @@ impl QueryState {
                 if self.clash.is_some() && detail.contains("ERR_PROXY_CONNECTION_FAILED") =>
             {
                 ApiError::Transport(format!(
-                    "无法连接 Clash 专用端口 {}，请确认 Clash 正在运行并已加载果探雷达的扩展脚本",
+                    "无法连接 Clash 专用端口 {}，请确认 Clash 正在运行并已加载库存查询器的扩展脚本",
                     self.network.clash.proxy_port
                 ))
             }
@@ -4537,7 +4537,7 @@ mod tests {
             move || {
                 let mut proxies = serde_json::Map::new();
                 proxies.insert(
-                    "果探雷达".into(),
+                    "库存查询器".into(),
                     json!({"type": "Selector", "all": nodes, "now": *current.lock().unwrap()}),
                 );
                 for node in &nodes {
@@ -4608,7 +4608,7 @@ mod tests {
                         (
                             "200 OK",
                             json!({"connections": [
-                                {"id": "c1", "chains": ["香港01", "果探雷达"]},
+                                {"id": "c1", "chains": ["香港01", "库存查询器"]},
                                 {"id": "other", "chains": ["日本01", "节点选择"]}
                             ]})
                             .to_string(),
@@ -4691,7 +4691,7 @@ mod tests {
         let log = log.lock().await.clone();
         assert!(
             log.contains(
-                &r#"PUT /proxies/%E6%9E%9C%E6%8E%A2%E9%9B%B7%E8%BE%BE {"name":"日本01"}"#
+                &r#"PUT /proxies/%E5%BA%93%E5%AD%98%E6%9F%A5%E8%AF%A2%E5%99%A8 {"name":"日本01"}"#
                     .to_string()
             ),
             "应切换专用策略组：{log:?}"

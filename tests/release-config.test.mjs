@@ -11,7 +11,7 @@ test("Linux 包名使用合法 ASCII 标识且保留中文桌面名称", async (
   assert.match(config.productName, /^[a-z0-9][a-z0-9+.-]*$/);
   assert.equal(config.productName, "guotan-radar");
   assert.equal(config.bundle.linux.deb.desktopTemplate, "linux/guotan-radar.desktop.hbs");
-  assert.match(await readText("src-tauri/linux/guotan-radar.desktop.hbs"), /^Name=果探雷达$/m);
+  assert.match(await readText("src-tauri/linux/guotan-radar.desktop.hbs"), /^Name=库存查询器$/m);
 });
 
 test("发布名称、应用标识和版本保持一致", async () => {
@@ -19,7 +19,7 @@ test("发布名称、应用标识和版本保持一致", async () => {
   const config = await readJson("src-tauri/tauri.conf.json");
   const workspace = await readText("Cargo.toml");
   assert.equal(packageJson.name, "guotan-radar");
-  assert.equal(config.productName, "果探雷达");
+  assert.equal(config.productName, "库存查询器");
   assert.equal(config.identifier, "com.thomasdjmax.guotan-radar");
   assert.equal(config.version, packageJson.version);
   assert.match(workspace, new RegExp(`^version = "${packageJson.version.replaceAll(".", "\\.")}"$`, "m"));
@@ -52,14 +52,14 @@ test("Linux 和 Windows 构建保留安装验证，公开包使用 ASCII 文件�
   assert.match(workflow, /dpkg-query -W.*guotan-radar/);
   assert.match(workflow, /Start-Process.*installer\.FullName.*ArgumentList.*\/S/);
   assert.match(workflow, /Filter 'guotan-radar\.exe'/);
-  assert.match(workflow, /guotan-radar_\$\{version\}_\$\{PACKAGE_ARCH\}\.dmg/);
-  assert.match(workflow, /guotan-radar_\$\{version\}_\$\{PACKAGE_ARCH\}-setup\.exe/);
-  assert.match(readme, new RegExp(`guotan-radar_${escapedVersion}_aarch64\\.dmg`));
-  assert.match(readme, new RegExp(`guotan-radar_${escapedVersion}_amd64\\.deb`));
+  assert.match(workflow, /inventory-checker_\$\{version\}_\$\{PACKAGE_ARCH\}\.dmg/);
+  assert.match(workflow, /inventory-checker_\$\{version\}_\$\{PACKAGE_ARCH\}-setup\.exe/);
+  assert.match(readme, new RegExp(`inventory-checker_${escapedVersion}_aarch64\\.dmg`));
+  assert.match(readme, new RegExp(`inventory-checker_${escapedVersion}_amd64\\.deb`));
   assert.doesNotMatch(readme, new RegExp(`Apple\\.Store\\.Inventory\\.Monitor_${escapedVersion}`));
   assert.match(readme, /本次.*只(?:发布|提供).*Apple Silicon/);
   assert.match(readme, /内部数据目录继续使用 `apple-store-inventory-monitor`/);
-  assert.match(readme, /https:\/\/github\.com\/thomasDJMax\/guotan-radar\.git/);
+  assert.match(readme, /https:\/\/github\.com\/thomasDJMax\/inventory-checker\.git/);
 });
 
 test("构建模板随源码保留且 Actions 未启用，文档明确本机发布范围", async () => {
