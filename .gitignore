@@ -29,3 +29,10 @@ pnpm-debug.log*
 
 # 生成快照的脚本留下的字节码缓存
 __pycache__/
+
+# 本地设置与凭证
+.env
+.env.*
+!.env.example
+settings.v2.json
+settings.v2.json.*

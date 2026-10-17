@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, FileCode2, Globe, LoaderCircle, PlugZap, RefreshCw } from "lucide-react";
 import { Combobox } from "@/components/Combobox";
 import { CollapsiblePanel } from "@/components/CollapsiblePanel";
@@ -36,10 +36,10 @@ const MODE_LABELS: Record<NetworkMode, string> = {
 };
 
 /** Clash Verge「全局扩展脚本」模板，与 README 中的脚本保持一致。 */
-const SCRIPT_TEMPLATE = "// Clash Verge「全局扩展脚本」：节点只供果到雷达的专用端口使用，不影响电脑本身的节点\nconst APW_PREFIX = \"APW·\";\nconst APW_GROUP = __GROUP__;\nconst APW_SUBSCRIPTIONS = {\n  机场1: \"机场订阅地址\",\n};\n\nfunction main(config, profileName) {\n  const providers = config[\"proxy-providers\"] || {};\n  const used = [];\n  for (const [label, url] of Object.entries(APW_SUBSCRIPTIONS)) {\n    if (!/^https?:\\/\\//.test(url)) continue;\n    const key = `apw-${label}`;\n    providers[key] = {\n      type: \"http\",\n      url,\n      interval: 86400,\n      path: `./providers/${key}.yaml`,\n      override: { \"additional-prefix\": `${APW_PREFIX}${label}|` },\n      \"health-check\": { enable: false },\n    };\n    used.push(key);\n  }\n  config[\"proxy-providers\"] = providers;\n\n  // 原有策略组若自动收录全部节点（include-all / include-all-providers），排除专用节点\n  const guard = `^${APW_PREFIX}`;\n  const groups = (config[\"proxy-groups\"] || []).filter((g) => g.name !== APW_GROUP);\n  for (const group of groups) {\n    if (group[\"include-all\"] || group[\"include-all-providers\"]) {\n      const old = group[\"exclude-filter\"];\n      if (old && old.includes(guard)) continue;\n      group[\"exclude-filter\"] = old ? `(?:${old})|${guard}` : guard;\n    }\n  }\n  groups.push({ name: APW_GROUP, type: \"select\", proxies: [\"DIRECT\"], use: used });\n  config[\"proxy-groups\"] = groups;\n\n  const listeners = (config.listeners || []).filter((l) => l.name !== \"apple-store-monitor\");\n  listeners.push({ name: \"apple-store-monitor\", type: \"mixed\", port: __PORT__, listen: \"127.0.0.1\", proxy: APW_GROUP });\n  config.listeners = listeners;\n  return config;\n}";
+const SCRIPT_TEMPLATE = "// Clash Verge「全局扩展脚本」：节点只供果探雷达的专用端口使用，不影响电脑本身的节点\nconst APW_PREFIX = \"APW·\";\nconst APW_GROUP = __GROUP__;\nconst APW_SUBSCRIPTIONS = {\n  机场1: \"机场订阅地址\",\n};\n\nfunction main(config, profileName) {\n  const providers = config[\"proxy-providers\"] || {};\n  const used = [];\n  for (const [label, url] of Object.entries(APW_SUBSCRIPTIONS)) {\n    if (!/^https?:\\/\\//.test(url)) continue;\n    const key = `apw-${label}`;\n    providers[key] = {\n      type: \"http\",\n      url,\n      interval: 86400,\n      path: `./providers/${key}.yaml`,\n      override: { \"additional-prefix\": `${APW_PREFIX}${label}|` },\n      \"health-check\": { enable: false },\n    };\n    used.push(key);\n  }\n  config[\"proxy-providers\"] = providers;\n\n  // 原有策略组若自动收录全部节点（include-all / include-all-providers），排除专用节点\n  const guard = `^${APW_PREFIX}`;\n  const groups = (config[\"proxy-groups\"] || []).filter((g) => g.name !== APW_GROUP);\n  for (const group of groups) {\n    if (group[\"include-all\"] || group[\"include-all-providers\"]) {\n      const old = group[\"exclude-filter\"];\n      if (old && old.includes(guard)) continue;\n      group[\"exclude-filter\"] = old ? `(?:${old})|${guard}` : guard;\n    }\n  }\n  groups.push({ name: APW_GROUP, type: \"select\", proxies: [\"DIRECT\"], use: used });\n  config[\"proxy-groups\"] = groups;\n\n  const listeners = (config.listeners || []).filter((l) => l.name !== \"apple-store-monitor\");\n  listeners.push({ name: \"apple-store-monitor\", type: \"mixed\", port: __PORT__, listen: \"127.0.0.1\", proxy: APW_GROUP });\n  config.listeners = listeners;\n  return config;\n}";
 
 function configSnippet(clash: ClashSettings): string {
-  return SCRIPT_TEMPLATE.replace("__GROUP__", JSON.stringify(clash.group || "果到雷达")).replace(
+  return SCRIPT_TEMPLATE.replace("__GROUP__", JSON.stringify(clash.group || "果探雷达")).replace(
     "__PORT__",
     String(clash.proxyPort),
   );
@@ -102,7 +102,7 @@ function Code({ children }: { children: React.ReactNode }) {
 /** 手把手的 Clash 配置教程。用户不必查 README 也能完成节点轮换的配置。 */
 function ClashSetupGuide({ clash }: { clash: ClashSettings }) {
   const script = configSnippet(clash);
-  const group = clash.group || "果到雷达";
+  const group = clash.group || "果探雷达";
   const port = clash.proxyPort || 7899;
   return (
     <Dialog>
@@ -115,26 +115,26 @@ function ClashSetupGuide({ clash }: { clash: ClashSettings }) {
         <DialogHeader className="shrink-0 border-b border-border/60 px-6 pt-6 pb-4">
           <DialogTitle>配置 Clash 节点轮换</DialogTitle>
           <DialogDescription className="leading-5">
-            以 Clash Verge Rev（mihomo 内核）为例，约 3 分钟。配置只新增一个果到雷达专用的策略组和端口，电脑本身使用的节点不受影响。
+            以 Clash Verge Rev（mihomo 内核）为例，约 3 分钟。配置只新增一个果探雷达专用的策略组和端口，电脑本身使用的节点不受影响。
           </DialogDescription>
         </DialogHeader>
         <ol className="min-h-0 space-y-5 overflow-y-auto px-6 py-5">
           <GuideStep index={1} title="开启 Clash 外部控制器">
             <p>
               打开 Clash Verge，进入 <Ui>设置</Ui> → <Ui>Clash 设置</Ui> → <Ui>外部控制</Ui>，打开
-              <Ui>「启用外部控制器」</Ui>，然后保存。果到雷达通过它读取节点和切换节点。
+              <Ui>「启用外部控制器」</Ui>，然后保存。果探雷达通过它读取节点和切换节点。
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li>
-                <Ui>外部控制器监听地址</Ui>（例如 <Code>127.0.0.1:9097</Code>）→ 填到果到雷达的<Ui>「控制接口」</Ui>，直接粘贴即可。
+                <Ui>外部控制器监听地址</Ui>（例如 <Code>127.0.0.1:9097</Code>）→ 填到果探雷达的<Ui>「控制接口」</Ui>，直接粘贴即可。
               </li>
               <li>
-                <Ui>API 访问密钥</Ui> → 填到果到雷达的<Ui>「密钥」</Ui>。没有设置密钥可留空，建议设置一个。
+                <Ui>API 访问密钥</Ui> → 填到果探雷达的<Ui>「密钥」</Ui>。没有设置密钥可留空，建议设置一个。
               </li>
             </ul>
           </GuideStep>
 
-          <GuideStep index={2} title="添加果到雷达专用的扩展脚本">
+          <GuideStep index={2} title="添加果探雷达专用的扩展脚本">
             <ol className="list-decimal space-y-1 pl-5">
               <li>
                 进入 Clash Verge 的 <Ui>订阅</Ui> 页面，在页面底部找到 <Ui>「全局扩展脚本」</Ui>（右上角标着 Script）。
@@ -171,12 +171,12 @@ function ClashSetupGuide({ clash }: { clash: ClashSettings }) {
             </ul>
           </GuideStep>
 
-          <GuideStep index={4} title="回到果到雷达填写并检查">
+          <GuideStep index={4} title="回到果探雷达填写并检查">
             <div className="overflow-hidden rounded-lg border border-border/60">
               <table className="w-full text-left text-xs leading-5">
                 <thead className="bg-muted/40 text-foreground">
                   <tr>
-                    <th className="px-3 py-1.5 font-medium">果到雷达中的项目</th>
+                    <th className="px-3 py-1.5 font-medium">果探雷达中的项目</th>
                     <th className="px-3 py-1.5 font-medium">填写什么</th>
                   </tr>
                 </thead>
@@ -375,17 +375,41 @@ export function NetworkSettings({
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<ClashRouteCheck | string | null>(null);
 
-  useEffect(() => setDraft(network.clash), [network.clash]);
+  const previousClash = useRef(network.clash);
+  const [saveError, setSaveError] = useState(false);
 
-  const saveClash = () => {
-    if (JSON.stringify(draft) === JSON.stringify(network.clash)) return;
+  useEffect(() => {
+    const previous = previousClash.current;
+    previousClash.current = network.clash;
+    // 其他设置保存也会带回完整设置；只同步没有本地编辑的字段。
+    setDraft((current) => {
+      const next = { ...current };
+      for (const key of Object.keys(network.clash) as (keyof ClashSettings)[]) {
+        if (current[key] === previous[key]) Object.assign(next, { [key]: network.clash[key] });
+      }
+      return next;
+    });
+  }, [network.clash]);
+
+  const saveClash = async () => {
+    const patch: Partial<ClashSettings> = {};
+    for (const key of Object.keys(draft) as (keyof ClashSettings)[]) {
+      if (draft[key] !== network.clash[key]) Object.assign(patch, { [key]: draft[key] });
+    }
+    if (Object.keys(patch).length === 0) return;
     setCheck(null);
-    void saveSettings({ network: { ...network, clash: draft } });
+    const saved = await saveSettings((current) => ({
+      network: { ...current.network, clash: { ...current.network.clash, ...patch } },
+    }));
+    setSaveError(!saved);
   };
   const text = (key: "controller" | "secret" | "group" | "nodeFilter") => ({
     value: draft[key],
-    onChange: (event: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, [key]: event.target.value }),
-    onBlur: saveClash,
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+      setDraft((current) => ({ ...current, [key]: event.target.value }));
+      setSaveError(false);
+    },
+    onBlur: () => void saveClash(),
   });
 
   return (
@@ -402,7 +426,7 @@ export function NetworkSettings({
           value={network.mode}
           onValueChange={(mode) => {
             setCheck(null);
-            void saveSettings({ network: { ...network, mode: mode as NetworkMode } });
+            void saveSettings((current) => ({ network: { ...current.network, mode: mode as NetworkMode } }));
           }}
         >
           <SelectTrigger id="network-mode" className="control-surface w-full" aria-label="出口方式">
@@ -433,7 +457,7 @@ export function NetworkSettings({
             pinned={network.mode === "pinned" ? network.clash.pinnedNode : null}
             onPin={async (node) => {
               // 先保存，保证重启后仍用该节点；再立即切换，不必等到下一轮。
-              if (await saveSettings({ network: { ...network, clash: { ...network.clash, pinnedNode: node } } })) {
+              if (await saveSettings((current) => ({ network: { ...current.network, clash: { ...current.network.clash, pinnedNode: node } } }))) {
                 await selectClashNode(node);
               }
             }}
@@ -472,7 +496,7 @@ export function NetworkSettings({
                   const port = Number.parseInt(event.target.value.replace(/\D/g, ""), 10);
                   setDraft({ ...draft, proxyPort: Number.isFinite(port) ? Math.min(port, 65535) : 0 });
                 }}
-                onBlur={saveClash}
+                onBlur={() => void saveClash()}
               />
               <FieldHint>脚本 listeners 的端口</FieldHint>
             </div>
@@ -480,7 +504,7 @@ export function NetworkSettings({
           <div className="grid min-w-0 grid-cols-2 gap-2">
             <div className="field-group">
               <Label htmlFor="clash-group" className="control-label">策略组</Label>
-              <Input id="clash-group" className="control-surface select-text" placeholder="果到雷达" {...text("group")} />
+              <Input id="clash-group" className="control-surface select-text" placeholder="果探雷达" {...text("group")} />
               <FieldHint>脚本中的 APW_GROUP</FieldHint>
             </div>
             <div className="field-group">
@@ -495,6 +519,7 @@ export function NetworkSettings({
             </div>
           </div>
 
+          {saveError ? <p role="alert" className="text-xs leading-5 text-destructive">线路设置保存失败，输入已保留。失去焦点时会重试。</p> : null}
           <div className="grid gap-2">
             <Button
               type="button"

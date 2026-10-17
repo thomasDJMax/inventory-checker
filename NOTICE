@@ -2,6 +2,20 @@
 NOTICE — 来源、版权与修改声明
 ================================================================================
 
+本项目「果探雷达」（guotan-radar）直接基于：
+
+    直接上游名称  果到雷达 (apple-store-inventory-monitor)
+    直接上游地址  https://github.com/suversal/apple-store-inventory-monitor
+    上游维护者    suversal <https://github.com/suversal>
+    起始版本      v1.0.22（提交 7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9）
+    上游许可      GNU General Public License, version 3 or later
+    本分支地址    https://github.com/thomasDJMax/guotan-radar
+
+下文保留果到雷达原始来源、版权与修改声明；其中「本项目」等历史表述指对应
+历史版本。果探雷达在其基础上继续修改，完整 Git 历史与 LICENSE 一并保留。
+
+果到雷达原始来源声明：
+
 本项目 apple-store-inventory-monitor 直接基于下述项目继续开发：
 
     直接上游名称  Apple Pickup Watcher (apple-pickup-watcher)
@@ -39,6 +53,7 @@ https://github.com/ENCHIGO/apple-pickup-watcher/graphs/contributors 查看。
     Copyright (C) 2020-2025 Hteen and the apple-store-helper contributors
     Copyright (C) 2026 the apple-pickup-watcher contributors
     Copyright (C) 2026 the apple-store-inventory-monitor contributors
+    Copyright (C) 2026 thomasDJMax and the guotan-radar contributors
 
 原项目的许可条款以 GPL-3.0 全文形式完整保留在本仓库根目录的 LICENSE 文件中，
 未作任何删改。
@@ -203,3 +218,15 @@ Rust 侧：
     typescript                 Apache-2.0
 
 src/components/ui/ 下的组件基于 shadcn/ui（MIT）生成，并按本项目需要作了修改。
+
+
+本地修复声明（2026-10-17）：基于果到雷达 v1.0.22，修复查询调度、前端连接及状态竞态、设置保存和响应式界面。本地版本 1.0.23-local.1，保留原应用名称、标识、图标和 GPL-3.0-or-later 许可；不代表上游官方发布。
+
+
+果探雷达修改声明（2026-10-17）：由 thomasDJMax 基于果到雷达 v1.0.22 与上述
+本地修复版继续维护，发布版本 1.1.0。修改对外名称、主程序名、仓库地址、应用
+标识和新配置的默认 Clash 组名；保留内部数据目录及既有用户配置。关闭内置
+Tauri 签名更新并移除上游公钥，改为手动打开本分支 Releases。构建配置以普通模板随源码
+保留，当前没有启用 GitHub Actions；打包模板启用后仅手动构建验证，不自动
+发布 Release 或生成更新清单。原图标、声音、目录数据
+和其余承继代码的来源与许可继续保留；本分支不代表上游或 Apple 官方发布。

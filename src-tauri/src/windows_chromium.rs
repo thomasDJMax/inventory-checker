@@ -301,7 +301,7 @@ pub(crate) fn reclaim_orphaned_profile_process(profile: &Path) -> Result<(), Api
         }
         if parent_still_alive(&process)? {
             return Err(ApiError::Transport(
-                "另一个果到雷达实例或启动进程仍在使用专属浏览器，请先退出该实例；本轮保留现有进程"
+                "另一个果探雷达实例或启动进程仍在使用专属浏览器，请先退出该实例；本轮保留现有进程"
                     .into(),
             ));
         }

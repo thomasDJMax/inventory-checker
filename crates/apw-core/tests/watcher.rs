@@ -294,6 +294,40 @@ async fn 用户可在保护冷却期间立即重试且不会被强制等待() {
     assert!(!watcher.retry_now().await, "暂停后不应擅自启动监控");
 }
 
+#[tokio::test(start_paused = true)]
+async fn 读取状态与重复启动不会绕过查询间隔或保护冷却() {
+    let fake = ProtectedFetcher {
+        cooldown: Duration::from_secs(60),
+        ..ProtectedFetcher::default()
+    };
+    let (watcher, mut rx) = Watcher::spawn(fake.clone(), fast_config());
+    watcher.set_targets(vec![target("R683", "MG724CH/A")]).await;
+    watcher.start().await;
+    wait_cycle(&mut rx).await;
+
+    for _ in 0..3 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(watcher.snapshot().await.len(), 1);
+        assert!(watcher.is_running().await);
+        watcher.start().await;
+        watcher.set_targets(vec![target("R683", "MG724CH/A")]).await;
+        watcher.set_interval(fast_config().interval).await;
+        watcher.set_delivery_region(None).await;
+    }
+    assert_eq!(
+        fake.calls.load(Ordering::SeqCst),
+        1,
+        "读取快照、读取运行状态和重复启动都不应提前触发库存请求"
+    );
+
+    tokio::time::advance(Duration::from_secs(57)).await;
+    tokio::time::timeout(Duration::from_millis(100), wait_cycle(&mut rx))
+        .await
+        .expect("读取状态也不应延后原定的下一轮查询");
+    assert_eq!(fake.calls.load(Ordering::SeqCst), 2);
+    watcher.stop().await;
+}
+
 #[tokio::test]
 async fn 冷却短于普通间隔且暂停重开后仍上报冷却状态() {
     let fake = ProtectedFetcher {

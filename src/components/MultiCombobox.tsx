@@ -80,7 +80,10 @@ export function MultiCombobox({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(nextOpen) => {
+      setOpen(nextOpen);
+      if (!nextOpen) setQuery("");
+    }}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -99,10 +102,10 @@ export function MultiCombobox({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-auto min-w-(--radix-popover-trigger-width) max-w-[min(94vw,60rem)] p-0"
+        className="flex max-h-(--radix-popover-content-available-height) w-auto min-w-(--radix-popover-trigger-width) max-w-[min(94vw,60rem)] flex-col overflow-hidden p-0"
         align="start"
       >
-        <div className="flex items-center gap-2 rounded-t-md border-b px-3 focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-inset">
+        <div className="flex shrink-0 items-center gap-2 rounded-t-md border-b px-3 focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-inset">
           <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <Input
             value={query}
@@ -113,7 +116,7 @@ export function MultiCombobox({
           />
         </div>
 
-        <div className="flex min-h-10 items-center justify-between gap-3 border-b px-3 py-1.5">
+        <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b px-3 py-1.5">
           <span className="text-xs text-muted-foreground" aria-live="polite">
             已选 {selectedOptions.length} / {options.length}
           </span>
@@ -140,7 +143,7 @@ export function MultiCombobox({
         </div>
 
         <fieldset
-          className="max-h-[300px] overflow-x-hidden overflow-y-auto p-1"
+          className="min-h-0 max-h-[300px] overflow-x-hidden overflow-y-auto p-1"
           aria-label={placeholder}
         >
           {filtered.length === 0 ? (

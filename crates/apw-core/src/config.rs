@@ -190,7 +190,7 @@ pub enum NetworkMode {
 /// Clash / mihomo 线路设置。
 ///
 /// 应用只切换 `group` 这一个策略组的节点，并且只让查询浏览器走 `proxy_port`。
-/// 这要求用户为果到雷达单独配置策略组和监听端口，切换节点才不会改变电脑上
+/// 这要求用户为果探雷达单独配置策略组和监听端口，切换节点才不会改变电脑上
 /// 其他软件的代理出口。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -214,7 +214,7 @@ impl Default for ClashSettings {
         Self {
             controller: "http://127.0.0.1:9097".into(),
             secret: String::new(),
-            group: "果到雷达".into(),
+            group: "果探雷达".into(),
             proxy_port: 7899,
             node_filter: String::new(),
             pinned_node: "DIRECT".into(),

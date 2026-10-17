@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
-use tauri_plugin_updater::UpdaterExt;
 
 mod browser_support;
 mod checkout;
@@ -667,7 +666,9 @@ async fn save_settings(
         .await;
     state.fetcher.set_network(next.network.clone()).await;
 
-    Ok(next)
+    // 同步引擎期间，自动结账任务可能已经关闭开关；返回当前设置，
+    // 避免把落盘时的旧快照重新交给界面。
+    Ok(state.settings_snapshot())
 }
 
 /// Clash 线路测试结果。只访问本机控制接口和端口，不向 Apple 发请求。
@@ -788,107 +789,6 @@ async fn retry_watching_now(state: tauri::State<'_, AppState>) -> Result<bool, S
 #[tauri::command]
 async fn is_running(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     Ok(state.watcher.is_running().await)
-}
-
-/// 一个待安装的更新。
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateInfo {
-    version: String,
-    current_version: String,
-    notes: Option<String>,
-}
-
-/// 查询有没有新版本。返回 `None` 表示已经是最新。
-///
-/// **刻意不做静默自动安装**：给用户装东西这件事应该由用户点头。何况这是个会在
-/// 抢购当口挂着的程序，自作主张地下载、替换、重启，正好会赶上最不该被打断的时刻。
-#[tauri::command]
-async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
-    let updater = app
-        .updater_builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| e.to_string())?;
-    match tokio::time::timeout(Duration::from_secs(20), updater.check())
-        .await
-        .map_err(|_| "检查更新超时，请稍后重试".to_string())?
-    {
-        Ok(Some(update)) => Ok(Some(UpdateInfo {
-            version: update.version.clone(),
-            current_version: update.current_version.clone(),
-            notes: update.body.clone(),
-        })),
-        Ok(None) => Ok(None),
-        // 检查更新失败不是错误状态，只是这次没查到 —— 网络不通、GitHub 抽风都
-        // 会走到这里，没必要弹给用户看，写进日志即可。
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-/// 下载并安装更新。安装完成后需要重启应用才生效。
-#[tauri::command]
-async fn install_update(app: AppHandle) -> Result<(), String> {
-    let updater = app
-        .updater_builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let update = tokio::time::timeout(Duration::from_secs(20), updater.check())
-        .await
-        .map_err(|_| "检查更新超时，请稍后重试".to_string())?
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "已经是最新版本".to_string())?;
-
-    let handle = app.clone();
-    let finished = app.clone();
-    let mut downloaded = 0_u64;
-    let mut last_emit = std::time::Instant::now() - Duration::from_secs(1);
-    let _ = app.emit(
-        "watcher://update-progress",
-        serde_json::json!({
-            "phase": "downloading", "downloaded": 0, "total": null
-        }),
-    );
-    let bytes = update
-        .download(
-            move |chunk, total| {
-                // 插件回调给的是本次数据块大小，界面需要累计字节数。
-                downloaded = downloaded.saturating_add(chunk as u64);
-                if last_emit.elapsed() >= Duration::from_millis(100) || total == Some(downloaded) {
-                    let _ = handle.emit(
-                        "watcher://update-progress",
-                        serde_json::json!({
-                            "phase": "downloading", "downloaded": downloaded, "total": total
-                        }),
-                    );
-                    last_emit = std::time::Instant::now();
-                }
-            },
-            move || {
-                let _ = finished.emit(
-                    "watcher://update-progress",
-                    serde_json::json!({
-                        "phase": "verifying", "downloaded": 0, "total": null
-                    }),
-                );
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    // download 完成签名验证后才允许安装，校验失败绝不进入此分支。
-    let _ = app.emit(
-        "watcher://update-progress",
-        serde_json::json!({
-            "phase": "installing", "downloaded": 0, "total": null
-        }),
-    );
-    tauri::async_runtime::spawn_blocking(move || update.install(bytes))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
 }
 
 /// 与库存目标共用目录信息，避免 Apple Watch 的表壳料号跳到不存在的详情页。
@@ -1318,7 +1218,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 tauri::Error::AssetNotFound("默认窗口图标缺失，无法建立托盘".into())
             })?,
         )
-        .tooltip("果到雷达")
+        .tooltip("果探雷达")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1435,7 +1335,6 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let mut notices = Vec::new();
             let (mut settings, store) = load_settings(&mut notices);
@@ -1547,8 +1446,6 @@ pub fn run() {
             open_checkout_browser,
             test_checkout,
             open_target_product,
-            check_for_update,
-            install_update,
         ])
         .build(tauri::generate_context!())
         .expect("Tauri 应用启动失败")

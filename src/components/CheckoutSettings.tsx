@@ -87,13 +87,16 @@ export function CheckoutSettings({ checkout, targets }: { checkout: Checkout; ta
     ? INSTALLMENT_BANKS
     : [...INSTALLMENT_BANKS, checkout.installmentBank];
 
-  const save = (patch: Partial<Checkout>) => void saveSettings({ checkout: { ...checkout, ...patch } });
+  const save = (patch: Partial<Checkout>) => void saveSettings((current) => ({ checkout: { ...current.checkout, ...patch } }));
   const contact = (key: ContactKey) => (value: string) => save({ [key]: value });
   const suffixReady = checkout.nationalIdSuffix.length === 4;
   const run = async (kind: "open" | "test", action: () => Promise<void>) => {
     setBusy(kind);
-    await action();
-    setBusy(null);
+    try {
+      await action();
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -277,7 +280,7 @@ export function CheckoutSettings({ checkout, targets }: { checkout: Checkout; ta
             : "关闭时停在「查看订单」页，由你自己点「立即下单」并付款。"}
         </p>
 
-        <div className="grid min-w-0 grid-cols-2 gap-2">
+        <div className="grid min-w-0 gap-2 min-[400px]:grid-cols-2 min-[1280px]:grid-cols-1 min-[1600px]:grid-cols-2">
           <Button
             type="button"
             variant="outline"

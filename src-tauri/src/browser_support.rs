@@ -32,7 +32,7 @@ pub(crate) fn startup_exit_detail(code: Option<i32>, stderr: &str) -> String {
     let message = if permission_denied {
         "系统拒绝访问浏览器专属资料目录。请检查目录权限和安全软件的拦截记录"
     } else if code == Some(21) {
-        "浏览器专属资料目录被占用，或无法取得目录锁。请确认没有其他果到雷达实例正在运行"
+        "浏览器专属资料目录被占用，或无法取得目录锁。请确认没有其他果探雷达实例正在运行"
     } else {
         "查询浏览器启动后退出，尚未取得库存。请查看启动诊断，确认 Chrome 或 Edge 可以正常运行"
     };

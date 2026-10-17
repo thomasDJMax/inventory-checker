@@ -1,10 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "guodao-radar",
+  "productName": "guotan-radar",
   "bundle": {
     "linux": {
       "deb": {
-        "desktopTemplate": "linux/guodao-radar.desktop.hbs"
+        "desktopTemplate": "linux/guotan-radar.desktop.hbs"
       }
     }
   }

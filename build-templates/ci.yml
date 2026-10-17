@@ -61,7 +61,7 @@ jobs:
       #   - pkg-config             alsa-sys 等 *-sys crate 靠它找库；runner 上通常
       #                            自带，写出来是为了不依赖 runner 镜像的默认内容。
       # 打包 AppImage 需要的 patchelf 这里没装：CI 不出安装包，只有 release 需要。
-      # 改动这个列表时记得同步 .github/workflows/release.yml 里的同名步骤。
+      # 改动这个列表时记得同步 build-templates/packages.yml 里的同名步骤。
       - name: 安装 Tauri 与音频的系统依赖
         run: |
           sudo apt-get update
@@ -147,7 +147,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       # 这里**绝对不能**加 --all-features：那会真的执行 live.rs，向 Apple 的
-      # 线上接口发七次请求。真实接口的契约测试只在下面按天定时的 live job 里跑。
+      # 线上接口发七次请求。真实接口的契约测试只在下面手动触发的 live job 里跑。
       - name: cargo test
         run: cargo test
 
@@ -234,7 +234,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - name: 真实浏览器启动、退出与再次启动（不访问 Apple）
-        run: cargo test -p apple-store-inventory-monitor --lib 真实windows浏览器会话能启动并回收 -- --ignored
+        run: cargo test -p guotan-radar --lib 真实windows浏览器会话能启动并回收 -- --ignored
 
   # ---------------------------------------------------------------------------
   # 针对 Apple 真实接口的手动诊断测试。

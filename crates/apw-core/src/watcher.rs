@@ -719,12 +719,35 @@ impl<F: Fetcher> Engine<F> {
                 continue;
             }
 
-            tokio::select! {
-                () = tokio::time::sleep(delay) => {}
-                maybe = cmd_rx.recv() => match maybe {
-                    Some(cmd) => self.handle_command(cmd).await,
-                    None => return,
-                },
+            // 等待期间仍需回答快照和运行状态，但读取状态不是「立即查询」。
+            // 必须保留同一条定时器：每收到命令就离开等待会绕过保护冷却；
+            // 每收到命令就重建定时器则会让频繁读取状态把下一轮无限延后。
+            let sleep = tokio::time::sleep(delay);
+            tokio::pin!(sleep);
+            loop {
+                tokio::select! {
+                    () = &mut sleep => break,
+                    maybe = cmd_rx.recv() => match maybe {
+                        Some(cmd) => {
+                            let start_next_cycle = match &cmd {
+                                Command::SetTargets(targets) => targets != &self.targets,
+                                Command::SetInterval(interval) => {
+                                    *interval > Duration::ZERO && *interval != self.config.interval
+                                }
+                                Command::SetDeliveryRegion(region) => {
+                                    region != &self.config.delivery_region
+                                }
+                                Command::Stop(_) | Command::RetryNow(_) => true,
+                                Command::Start(_) | Command::Snapshot(_) | Command::IsRunning(_) => false,
+                            };
+                            self.handle_command(cmd).await;
+                            if start_next_cycle {
+                                break;
+                            }
+                        }
+                        None => return,
+                    },
+                }
             }
         }
     }

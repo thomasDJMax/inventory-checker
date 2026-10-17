@@ -23,10 +23,8 @@ import {
   Truck,
   CirclePause,
   Volume2,
-  X,
 } from "lucide-react";
 
-import { describeUpdateProgress, updatePercent } from "@/lib/updateStatus";
 import { Combobox } from "@/components/Combobox";
 import { MultiCombobox } from "@/components/MultiCombobox";
 import { CollapsiblePanel } from "@/components/CollapsiblePanel";
@@ -72,12 +70,9 @@ import {
 import {
   changeLocale,
   connect,
-  dismissUpdate,
-  installUpdate,
   loadDeliveryLocalities,
   loadWatchBandChoices,
   loadWatchBandSizes,
-  openAuthorPage,
   openProjectPage,
   openReleasePage,
   openTargetProduct,
@@ -138,14 +133,6 @@ function GithubBrandIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path fillRule="evenodd" d="M12 2C6.477 2 2 6.589 2 12.253c0 4.53 2.865 8.374 6.839 9.731.5.094.682-.222.682-.494 0-.244-.009-.888-.014-1.744-2.782.62-3.369-1.374-3.369-1.374-.455-1.184-1.11-1.499-1.11-1.499-.908-.636.069-.623.069-.623 1.004.073 1.532 1.057 1.532 1.057.892 1.568 2.341 1.115 2.91.853.091-.663.349-1.115.635-1.371-2.221-.259-4.555-1.14-4.555-5.067 0-1.119.389-2.034 1.029-2.751-.103-.26-.446-1.302.098-2.713 0 0 .84-.276 2.75 1.051A9.33 9.33 0 0 1 12 7.992a9.31 9.31 0 0 1 2.504.346c1.909-1.327 2.748-1.051 2.748-1.051.545 1.411.202 2.453.1 2.713.64.717 1.027 1.632 1.027 2.751 0 3.937-2.337 4.805-4.565 5.059.359.317.679.944.679 1.903 0 1.374-.012 2.482-.012 2.819 0 .275.18.593.688.493C19.14 20.625 22 16.783 22 12.253 22 6.589 17.523 2 12 2Z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
-function XBrandIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z" />
     </svg>
   );
 }
@@ -316,12 +303,10 @@ function watchBandSizeLabel(text: string): string {
 
 function WatchBandPicker({
   target,
-  targets,
   defaultCompanionPart,
   disabled,
 }: {
   target: Target;
-  targets: Target[];
   defaultCompanionPart?: string;
   disabled: boolean;
 }) {
@@ -384,7 +369,7 @@ function WatchBandPicker({
     if (!choice || !size) return;
     setSaving(true);
     const companionName = `${choice.styleName} · ${choice.colorName} · ${watchBandSizeLabel(size.text)}`;
-    const saved = await setTargets(targets.map((item) => (
+    const saved = await setTargets((current) => current.map((item) => (
       item.locale === target.locale && item.partNumber === target.partNumber
         ? { ...item, companionPart: size.partNumber, companionName }
         : item
@@ -396,7 +381,7 @@ function WatchBandPicker({
   async function restoreAutomaticBand() {
     if (!defaultCompanionPart) return;
     setSaving(true);
-    const saved = await setTargets(targets.map((item) => (
+    const saved = await setTargets((current) => current.map((item) => (
       item.locale === target.locale && item.partNumber === target.partNumber
         ? { ...item, companionPart: defaultCompanionPart, companionName: undefined }
         : item
@@ -479,9 +464,24 @@ function WatchBandPicker({
 export default function App() {
   const ui = useSyncExternalStore(watcherStore.subscribe, watcherStore.getSnapshot);
   const [clockMs, setClockMs] = useState(() => Date.now());
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [watcherBusy, setWatcherBusy] = useState(false);
+
+  async function connectEngine() {
+    setConnecting(true);
+    setConnectionError(null);
+    try {
+      await connect();
+    } catch (error) {
+      setConnectionError(`无法连接本地监控引擎：${String(error)}`);
+    } finally {
+      setConnecting(false);
+    }
+  }
 
   useEffect(() => {
-    void connect();
+    void connectEngine();
   }, []);
 
   useEffect(() => {
@@ -494,11 +494,14 @@ export default function App() {
   const [storeNumbers, setStoreNumbers] = useState<string[]>([]);
   const [partNumbers, setPartNumbers] = useState<string[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [localeChanging, setLocaleChanging] = useState(false);
   const [removingTargetKeys, setRemovingTargetKeys] = useState<Set<string>>(() => new Set());
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [barkDraft, setBarkDraft] = useState<string | null>(null);
-  const [intervalDraft, setIntervalDraft] = useState<number | null>(null);
+  const [intervalDraft, setIntervalDraft] = useState<string | null>(null);
+  const [barkError, setBarkError] = useState(false);
+  const [intervalError, setIntervalError] = useState<string | null>(null);
   const [deliveryDraft, setDeliveryDraft] = useState<DeliveryRegion>({ state: "", city: "", district: "" });
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryLocalities>(EMPTY_DELIVERY_LOCALITIES);
   const [deliveryOptionsLoading, setDeliveryOptionsLoading] = useState(false);
@@ -572,7 +575,39 @@ export default function App() {
   }
 
   const barkValue = barkDraft ?? ui.settings.barkUrl;
-  const intervalValue = intervalDraft ?? ui.settings.intervalSeconds;
+  const intervalValue = intervalDraft ?? String(ui.settings.intervalSeconds);
+
+  async function persistBark() {
+    if (barkDraft === null) return;
+    const submitted = barkDraft;
+    const saved = await saveSettings({ barkUrl: submitted.trim() });
+    setBarkError(!saved);
+    if (saved) setBarkDraft((current) => current === submitted ? null : current);
+  }
+
+  async function persistInterval() {
+    if (intervalDraft === null) return;
+    const submitted = intervalDraft;
+    const seconds = Number(submitted);
+    if (!submitted.trim() || !Number.isFinite(seconds) || seconds < 5) {
+      setIntervalError("请输入至少 5 秒的查询间隔。");
+      return;
+    }
+    const saved = await setIntervalSeconds(Math.round(seconds));
+    setIntervalError(saved ? null : "查询间隔保存失败，输入已保留。失去焦点时会重试。");
+    if (saved) setIntervalDraft((current) => current === submitted ? null : current);
+  }
+
+  async function toggleWatching() {
+    if (watcherBusy) return;
+    setWatcherBusy(true);
+    try {
+      if (ui.running) await stopWatching();
+      else await startWatching();
+    } finally {
+      setWatcherBusy(false);
+    }
+  }
   const deliverySelectionValid =
     deliveryOptions.states.some((option) => option.value === deliveryDraft.state)
     && deliveryOptions.cities.some((option) => option.value === deliveryDraft.city)
@@ -673,14 +708,14 @@ export default function App() {
   }, [partNumbers, storeNumbers, targets, ui.category, ui.products, ui.settings.locale, ui.stores]);
 
   const hasCompleteSelection = storeNumbers.length > 0 && partNumbers.length > 0;
-  const canAdd = pendingTargets.length > 0 && !isAdding;
+  const canAdd = ui.ready && pendingTargets.length > 0 && !isAdding && !localeChanging;
   const duplicateCount = storeNumbers.length * partNumbers.length - pendingTargets.length;
 
   async function onAdd() {
     if (!canAdd) return;
     setIsAdding(true);
     try {
-      if (await setTargets([...targets, ...pendingTargets])) setPartNumbers([]);
+      if (await setTargets((current) => [...current, ...pendingTargets])) setPartNumbers([]);
     } finally {
       setIsAdding(false);
     }
@@ -717,8 +752,8 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={180}>
       <div className="app-canvas min-h-screen text-foreground">
-        <main className="flex min-h-screen w-full max-w-none flex-col gap-4 overflow-x-hidden px-5 py-5 min-[980px]:h-screen min-[980px]:overflow-hidden">
-          <header className="surface-panel flex shrink-0 items-center justify-between gap-5 px-5 py-4">
+        <main className="flex min-h-screen w-full max-w-none flex-col gap-4 overflow-x-hidden px-5 py-5 min-[1280px]:h-screen min-[1280px]:overflow-y-auto">
+          <header className="surface-panel flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:gap-5 sm:px-5">
             <div className="flex min-w-0 items-center gap-3.5">
               <div className="brand-mark" aria-hidden="true">
                 <Radar className="size-5" strokeWidth={1.8} />
@@ -726,7 +761,7 @@ export default function App() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h1 className="truncate text-lg font-semibold tracking-[-0.02em]">
-                    果到雷达
+                    果探雷达
                   </h1>
                   <Badge variant="outline" className="hidden border-primary/20 bg-primary/8 text-primary sm:inline-flex">
                     LIVE
@@ -741,7 +776,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 min-[860px]:flex">
+            <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 min-[1200px]:flex">
               <span className="truncate text-sm text-muted-foreground">
                 本软件已开源，欢迎下载最新版体验
               </span>
@@ -759,31 +794,24 @@ export default function App() {
                 </TooltipTrigger>
                 <TooltipContent>GitHub 项目与最新版下载</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-lg px-2 text-sm text-muted-foreground hover:text-foreground"
-                    aria-label="在 X 关注 @suversal，获取更多信息"
-                    onClick={() => void openAuthorPage()}
-                  >
-                    <XBrandIcon />
-                    @suversal
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>关注我获取更多信息</TooltipContent>
-              </Tooltip>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2.5">
-              <div className="status-pill" role="status" aria-live="polite">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-xl" aria-label="在 GitHub 下载果探雷达更新" onClick={() => void openReleasePage()}>
+                    <Download aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>下载更新</TooltipContent>
+              </Tooltip>
+              <div className="status-pill max-w-full" role="status" aria-live="polite">
                 <span
                   className={`size-2 rounded-full ${ui.running ? browserFailure !== null ? "bg-destructive" : "bg-in-stock shadow-[0_0_12px_var(--in-stock)]" : "bg-muted-foreground/55"}`}
                   aria-hidden="true"
                 />
                 <span className="hidden text-xs text-muted-foreground sm:inline">监控状态</span>
-                <span className="text-sm font-medium">{ui.running ? browserFailure !== null ? browserRunningLabel : runningLabel : "已暂停"}</span>
+                <span className="min-w-0 truncate text-sm font-medium">{ui.running ? browserFailure !== null ? browserRunningLabel : runningLabel : "已暂停"}</span>
               </div>
               {ui.running && ui.cooling && (
                 <Button
@@ -801,21 +829,38 @@ export default function App() {
                 <Button
                   variant="secondary"
                   className="h-10 rounded-xl px-4"
-                  onClick={() => void stopWatching()}
+                  onClick={() => void toggleWatching()}
+                  disabled={watcherBusy}
+                  aria-busy={watcherBusy}
                 >
                   <Pause aria-hidden="true" /> 暂停
                 </Button>
               ) : (
                 <Button
                   className="h-10 rounded-xl px-4 shadow-[0_8px_24px_-12px_var(--primary)]"
-                  onClick={() => void startWatching()}
-                  disabled={ui.rows.length === 0}
+                  onClick={() => void toggleWatching()}
+                  disabled={!ui.ready || ui.rows.length === 0 || watcherBusy}
+                  aria-busy={watcherBusy}
                 >
                   <Play aria-hidden="true" /> 开始监控
                 </Button>
               )}
             </div>
           </header>
+
+          {connectionError !== null && (
+            <Alert variant="destructive" className="shrink-0 rounded-2xl border-destructive/25 bg-destructive/8 px-4 py-3">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>本地监控引擎连接失败</AlertTitle>
+              <AlertDescription>
+                <span className="break-words">{connectionError}</span>
+                <Button variant="outline" size="sm" disabled={connecting} onClick={() => void connectEngine()}>
+                  <RefreshCw className={connecting ? "animate-spin" : undefined} aria-hidden="true" />
+                  {connecting ? "正在连接…" : "重新连接"}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {browserFailure !== null && (
             <Alert variant="destructive" className="shrink-0 rounded-2xl border-destructive/25 bg-destructive/8 px-4 py-3">
@@ -827,7 +872,7 @@ export default function App() {
                 <ol className="list-decimal space-y-1 pl-5">
                   {describeBrowserRecovery(browserFailure).map((step) => <li key={step}>{step}</li>)}
                 </ol>
-                <span className="text-xs">仍无法恢复时，请把“查看详情”中的错误信息、果到雷达版本和浏览器版本通过项目的 GitHub Issues 反馈。{ui.running ? "运行中仍会按设置的间隔尝试连接。" : "当前监控已暂停。"}</span>
+                <span className="text-xs">仍无法恢复时，请把“查看详情”中的错误信息、果探雷达版本和浏览器版本通过项目的 GitHub Issues 反馈。{ui.running ? "运行中仍会按设置的间隔尝试连接。" : "当前监控已暂停。"}</span>
                 <div className="flex flex-wrap items-center gap-4">
                   <Button variant="outline" size="sm" onClick={() => void onRetryNow()} disabled={isRetrying} aria-busy={isRetrying}>
                     <RefreshCw className={isRetrying ? "animate-spin motion-reduce:animate-none" : undefined} aria-hidden="true" />
@@ -857,38 +902,7 @@ export default function App() {
             </Alert>
           )}
 
-          {ui.update !== null && (
-            <Alert className="shrink-0 rounded-2xl border-primary/20 bg-primary/8 px-4 py-3">
-              <Download aria-hidden="true" />
-              <AlertTitle>{ui.updateInstalled ? "更新已安装" : "发现新版本"} {ui.update.version}</AlertTitle>
-              <AlertDescription>
-                <span>{ui.updateInstalled ? "请退出并重新打开应用，新版本才会生效。" : `当前版本 ${ui.update.currentVersion}，安装后需重启应用。`}</span>
-                {ui.updateProgress !== null && (
-                  <div className="w-full space-y-1" role="status" aria-live="polite">
-                    <span>{describeUpdateProgress(ui.updateProgress)}</span>
-                    {ui.updateProgress.phase === "downloading" && (
-                      <progress className="block h-2 w-full max-w-sm accent-primary" aria-label="更新下载进度"
-                        max={100} value={updatePercent(ui.updateProgress)} />
-                    )}
-                  </div>
-                )}
-                {ui.updateError !== null && <p className="break-words text-destructive" role="alert">{ui.updateError}</p>}
-                <div className="mt-1.5 flex items-center gap-2">
-                  <Button size="sm" disabled={ui.installing || ui.updateInstalled} onClick={() => void installUpdate()}>
-                    {ui.updateInstalled ? "已安装" : ui.installing ? "正在更新…" : ui.updateError ? "重试" : "下载并安装"}
-                  </Button>
-                  {ui.updateError !== null && (
-                    <Button size="sm" variant="outline" onClick={() => void openReleasePage()}>下载安装包</Button>
-                  )}
-                  <Button size="sm" variant="ghost" disabled={ui.installing} onClick={dismissUpdate}>
-                    <X aria-hidden="true" /> 稍后
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[980px]:grid-cols-[minmax(0,1fr)_25rem]">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[1280px]:min-h-[38.5rem] min-[1280px]:grid-cols-[minmax(0,1fr)_21rem]">
             <div className="flex min-h-0 min-w-0 flex-col gap-4">
               <section className="surface-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
                 <div className="mb-4 flex items-start justify-between gap-4">
@@ -907,7 +921,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 items-start gap-3 lg:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
+                <div className="grid grid-cols-1 items-start gap-3 min-[540px]:grid-cols-2 min-[900px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr] min-[1280px]:grid-cols-2 min-[1600px]:grid-cols-[0.9fr_0.9fr_1.3fr_2fr]">
                   <div className="field-group">
                     <Label className="control-label">
                       <MapPin className="size-3.5" aria-hidden="true" /> 地区
@@ -916,15 +930,21 @@ export default function App() {
                       className="control-surface w-full"
                       options={ui.regions.map((region) => ({ value: region.locale, label: region.title }))}
                       value={ui.settings.locale}
-                      onChange={(locale) => {
+                      onChange={async (locale) => {
+                        if (locale === ui.settings.locale) return;
+                        setLocaleChanging(true);
                         setStoreNumbers([]);
                         setPartNumbers([]);
-                        void changeLocale(locale);
+                        try {
+                          await changeLocale(locale);
+                        } finally {
+                          setLocaleChanging(false);
+                        }
                       }}
                       placeholder="选择地区"
                       searchPlaceholder="搜索地区…"
                       emptyText="没有匹配的地区"
-                      disabled={isAdding}
+                      disabled={!ui.ready || isAdding || localeChanging}
                     />
                   </div>
 
@@ -943,7 +963,7 @@ export default function App() {
                       placeholder="选择品类"
                       searchPlaceholder="搜索品类…"
                       emptyText="没有匹配的品类"
-                      disabled={isAdding || ui.categories.length === 0}
+                      disabled={!ui.ready || isAdding || localeChanging || ui.categories.length === 0}
                     />
                   </div>
 
@@ -962,7 +982,7 @@ export default function App() {
                       searchPlaceholder="搜索门店…"
                       emptyText="没有匹配的门店"
                       selectionUnit="家门店"
-                      disabled={isAdding || storeOptions.length === 0}
+                      disabled={!ui.ready || isAdding || localeChanging || storeOptions.length === 0}
                     />
                   </div>
 
@@ -981,7 +1001,7 @@ export default function App() {
                       searchPlaceholder="搜索型号…"
                       emptyText="没有匹配的型号"
                       selectionUnit="个型号"
-                      disabled={isAdding || productOptions.length === 0}
+                      disabled={!ui.ready || isAdding || localeChanging || productOptions.length === 0}
                     />
                     <p className="text-[11px] leading-4 text-muted-foreground">
                       单次查询最多包含 20 个零件号，超过后会自动分批，不会遗漏已选型号。
@@ -996,7 +1016,7 @@ export default function App() {
                   <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground" role="status">
                     {hasCompleteSelection
                       ? `将新增 ${pendingTargets.length} 条监控${duplicateCount > 0 ? `，跳过 ${duplicateCount} 条已有组合` : ""}`
-                      : "选择门店和型号后，系统会按全部组合创建监控。"}
+                      : localeChanging ? "正在切换地区，读取门店与型号…" : "选择门店和型号后，系统会按全部组合创建监控。"}
                   </p>
                   <div className="flex items-center gap-2">
                     <Tooltip>
@@ -1032,7 +1052,7 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="surface-panel flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden" aria-labelledby="monitor-list-title">
+              <section className="surface-panel flex min-h-[360px] min-w-0 flex-1 min-[1280px]:min-h-[280px] flex-col overflow-hidden" aria-labelledby="monitor-list-title">
                 <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3.5">
                   <div className="flex items-center gap-3">
                     <div className="section-icon" aria-hidden="true">
@@ -1055,112 +1075,108 @@ export default function App() {
                   </div>
                 ) : null}
 
-                <ScrollArea horizontal className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:min-w-[1104px] [&_[data-slot=table-container]]:overflow-visible">
-                  <Table className="min-w-[1104px] table-fixed">
-                    <colgroup>
-                      <col className="w-36" />
-                      <col className="w-44" />
-                      <col className="w-[22rem]" />
-                      <col className="w-48" />
-                      <col className="w-24" />
-                      <col className="w-24" />
-                      <col className="w-12" />
-                    </colgroup>
-                    <TableHeader className="sticky top-0 z-10 bg-card/95">
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-36 px-4 text-xs text-muted-foreground">取货状态</TableHead>
-                        <TableHead className="w-44 px-4 text-xs text-muted-foreground">门店</TableHead>
-                        <TableHead className="px-4 text-xs text-muted-foreground">型号</TableHead>
-                        <TableHead className="w-48 px-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1.5"><Truck className="size-3.5" aria-hidden="true" />预计送货</span>
-                        </TableHead>
-                        <TableHead className="w-20 px-2 text-xs text-muted-foreground">最后检查</TableHead>
-                        <TableHead className="w-20 px-1 text-xs text-muted-foreground">Bark</TableHead>
-                        <TableHead className="sticky right-0 z-20 w-12 border-l border-border/40 bg-card/95" aria-label="操作" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ui.rows.length === 0 ? (
+                {ui.rows.length === 0 ? (
+                  <div className="flex min-h-64 flex-1 flex-col items-center justify-center px-6 py-10 text-center" role="status">
+                    <div className="mb-3 flex size-11 items-center justify-center rounded-2xl border border-border/60 bg-muted/35 text-muted-foreground">
+                      <Radar className="size-5" aria-hidden="true" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      {connectionError ? "监控引擎尚未连接" : ui.ready ? "还没有监控项目" : "正在载入目录…"}
+                    </p>
+                    <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+                      {connectionError ? "请点击上方重新连接，恢复门店与型号目录。" : ui.ready ? "从上方选择门店和型号，添加后即可开始监控。" : "正在连接本地监控引擎，请稍候。"}
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea horizontal aria-label="监控列表，可横向滚动查看全部列" className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:min-w-[960px] [&_[data-slot=table-container]]:overflow-visible">
+                    <Table className="min-w-[960px] table-fixed">
+                      <colgroup>
+                        <col className="w-28" />
+                        <col className="w-36" />
+                        <col />
+                        <col className="w-44" />
+                        <col className="w-22" />
+                        <col className="w-20" />
+                        <col className="w-12" />
+                      </colgroup>
+                      <TableHeader className="sticky top-0 z-10 bg-card/95">
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={7} className="h-44 text-center">
-                            <div className="mx-auto flex max-w-xs flex-col items-center">
-                              <div className="mb-3 flex size-11 items-center justify-center rounded-2xl border border-border/60 bg-muted/35 text-muted-foreground">
-                                <Radar className="size-5" aria-hidden="true" />
-                              </div>
-                              <p className="text-sm font-medium text-foreground">
-                                {ui.ready ? "还没有监控项目" : "正在载入目录…"}
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                {ui.ready ? "从上方选择门店和型号，添加后即可开始监控。" : "正在连接本地监控引擎，请稍候。"}
-                              </p>
-                            </div>
-                          </TableCell>
+                          <TableHead className="w-36 px-4 text-xs text-muted-foreground">取货状态</TableHead>
+                          <TableHead className="w-44 px-4 text-xs text-muted-foreground">门店</TableHead>
+                          <TableHead className="px-4 text-xs text-muted-foreground">型号</TableHead>
+                          <TableHead className="w-48 px-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1.5"><Truck className="size-3.5" aria-hidden="true" />预计送货</span>
+                          </TableHead>
+                          <TableHead className="w-20 px-2 text-xs text-muted-foreground">最后检查</TableHead>
+                          <TableHead className="w-20 px-1 text-xs text-muted-foreground">Bark</TableHead>
+                          <TableHead className="sticky right-0 z-20 w-12 border-l border-border/40 bg-card/95" aria-label="操作" />
                         </TableRow>
-                      ) : (
-                        sortedRows.map((row) => {
-                          const rowKey = targetKey(row.target);
-                          const removing = removingTargetKeys.has(rowKey);
-                          return (
-                            <TableRow key={rowKey} className="group hover:bg-muted/22">
-                              <TableCell className="px-4"><StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} /></TableCell>
-                              <TableCell className="truncate px-4 font-medium" title={row.target.storeTitle}>{row.target.storeTitle}</TableCell>
-                              <TableCell className="min-w-0 px-4 py-2.5 text-muted-foreground" title={row.target.productName}>
-                              <button
-                                className="block max-w-full whitespace-normal text-left leading-5 hover:text-primary hover:underline"
-                                aria-label={`打开商品页：${row.target.productName}`}
-                                onClick={() => void openTargetProduct(row.target)}
-                              >
-                                {compactProductName(row.target.productName)}
-                              </button>
-                              {row.target.companionPart && row.target.kitPart ? (
-                                <WatchBandPicker
-                                  target={row.target}
-                                  targets={targets}
-                                  defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
-                                  disabled={isAdding}
-                                />
-                              ) : null}
-                              </TableCell>
-                              <TableCell className="overflow-hidden px-2">
-                                <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
-                              </TableCell>
-                              <TableCell className="px-2 font-mono text-xs tabular-nums text-muted-foreground">
-                                {formatTime(row.lastCheckedMs)}
-                              </TableCell>
-                              <TableCell className="px-1">
-                                <ProductBarkRoute
-                                  target={row.target}
-                                  customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
-                                  disabled={isAdding}
-                                />
-                              </TableCell>
-                              <TableCell className="sticky right-0 z-10 border-l border-border/40 bg-card/95 pr-2 group-hover:bg-muted">
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="text-muted-foreground opacity-80 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                                  aria-label={removing ? "正在删除这条监控" : "删除这条监控"}
-                                  aria-busy={removing}
-                                  disabled={isAdding || removing}
-                                  onClick={() => void onRemove(row.target)}
+                      </TableHeader>
+                      <TableBody>
+                        {sortedRows.map((row) => {
+                            const rowKey = targetKey(row.target);
+                            const removing = removingTargetKeys.has(rowKey);
+                            return (
+                              <TableRow key={rowKey} className="group hover:bg-muted/22">
+                                <TableCell className="px-4"><StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} /></TableCell>
+                                <TableCell className="truncate px-4 font-medium" title={row.target.storeTitle}>{row.target.storeTitle}</TableCell>
+                                <TableCell className="min-w-0 px-4 py-2.5 text-muted-foreground" title={row.target.productName}>
+                                <button
+                                  className="block max-w-full whitespace-normal text-left leading-5 hover:text-primary hover:underline"
+                                  aria-label={`打开商品页：${row.target.productName}`}
+                                  onClick={() => void openTargetProduct(row.target)}
                                 >
-                                  {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 />}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                                  {compactProductName(row.target.productName)}
+                                </button>
+                                {row.target.companionPart && row.target.kitPart ? (
+                                  <WatchBandPicker
+                                    target={row.target}
+                                    defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
+                                    disabled={isAdding}
+                                  />
+                                ) : null}
+                                </TableCell>
+                                <TableCell className="overflow-hidden px-2">
+                                  <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
+                                </TableCell>
+                                <TableCell className="px-2 font-mono text-xs tabular-nums text-muted-foreground">
+                                  {formatTime(row.lastCheckedMs)}
+                                </TableCell>
+                                <TableCell className="px-1">
+                                  <ProductBarkRoute
+                                    target={row.target}
+                                    customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
+                                    disabled={isAdding}
+                                  />
+                                </TableCell>
+                                <TableCell className="sticky right-0 z-10 border-l border-border/40 bg-card/95 pr-2 group-hover:bg-muted">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-muted-foreground opacity-80 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                                    aria-label={removing ? "正在删除这条监控" : "删除这条监控"}
+                                    aria-busy={removing}
+                                    disabled={isAdding || removing}
+                                    onClick={() => void onRemove(row.target)}
+                                  >
+                                    {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 />}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
               </section>
             </div>
 
             <aside
-              className="workspace-sidebar flex min-h-0 flex-col gap-4 min-[980px]:overflow-y-auto min-[980px]:overscroll-contain min-[980px]:pr-2"
+              className="workspace-sidebar flex min-h-0 flex-col gap-4 min-[1280px]:overflow-y-auto min-[1280px]:overscroll-contain min-[1280px]:pr-2"
               aria-label="监控概览、设置与活动日志"
             >
+              <fieldset disabled={!ui.ready} className="contents" aria-label="监控设置与活动日志">
               <section className="grid grid-cols-4 gap-2" aria-label="监控概览">
                 <div className="metric-tile">
                   <Radar className="size-4 text-primary" aria-hidden="true" />
@@ -1210,15 +1226,17 @@ export default function App() {
                       min={5}
                       className="control-surface select-text pr-12 tabular-nums"
                       value={intervalValue}
-                      onChange={(event) => setIntervalDraft(event.target.valueAsNumber)}
-                      onBlur={() => {
-                        const seconds = Number.isFinite(intervalValue) ? Math.round(intervalValue) : 30;
-                        setIntervalDraft(null);
-                        void setIntervalSeconds(seconds);
+                      aria-invalid={intervalError !== null}
+                      aria-describedby={intervalError ? "interval-error" : undefined}
+                      onChange={(event) => {
+                        setIntervalDraft(event.target.value);
+                        setIntervalError(null);
                       }}
+                      onBlur={() => void persistInterval()}
                     />
                     <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">秒</span>
                   </div>
+                  {intervalError ? <p id="interval-error" role="alert" className="text-xs leading-5 text-destructive">{intervalError}</p> : null}
                 </div>
 
                 <div className="mt-3 field-group">
@@ -1336,12 +1354,15 @@ export default function App() {
                     className="control-surface select-text"
                     placeholder="https://api.day.app/你的BarkKey"
                     value={barkValue}
-                    onChange={(event) => setBarkDraft(event.target.value)}
-                    onBlur={() => {
-                      setBarkDraft(null);
-                      void saveSettings({ barkUrl: barkValue.trim() });
+                    aria-invalid={barkError}
+                    aria-describedby={barkError ? "bark-error" : undefined}
+                    onChange={(event) => {
+                      setBarkDraft(event.target.value);
+                      setBarkError(false);
                     }}
+                    onBlur={() => void persistBark()}
                   />
+                  {barkError ? <p id="bark-error" role="alert" className="text-xs leading-5 text-destructive">Bark 地址保存失败，输入已保留。失去焦点时会重试。</p> : null}
                   <p className="text-xs leading-5 text-muted-foreground">
                     监控列表可为某个型号指定其他人的 Bark 地址。
                   </p>
@@ -1419,6 +1440,7 @@ export default function App() {
                   </pre>
                 </ScrollArea>
               </section>
+              </fieldset>
             </aside>
           </div>
         </main>

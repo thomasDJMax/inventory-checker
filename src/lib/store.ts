@@ -29,7 +29,6 @@ import type {
   Target,
   TargetState,
   Trouble,
-  UpdateInfo,
   WatchBandChoice,
   WatchBandSize,
   WatcherEvent,
@@ -37,7 +36,6 @@ import type {
 import { assertNever, targetKey } from "./types";
 import { describeBrowserFailure, describeCycleRows, describeCycleSummary } from "./monitorLog";
 
-import { describeUpdateError, type UpdateProgress } from "./updateStatus";
 
 const EVENT_CHANNEL = "watcher://event";
 const NOTICE_CHANNEL = "watcher://notice";
@@ -72,13 +70,7 @@ export interface UiState {
   /** 正在从 Apple 官网刷新型号列表。 */
   refreshing: boolean;
   ready: boolean;
-  /** 检查到的新版本；null 表示已是最新或还没查。 */
-  update: UpdateInfo | null;
-  /** 正在下载安装更新。 */
-  installing: boolean;
-  updateProgress: UpdateProgress | null;
-  updateError: string | null;
-  updateInstalled: boolean;
+
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -96,7 +88,7 @@ const DEFAULT_SETTINGS: Settings = {
     clash: {
       controller: "http://127.0.0.1:9097",
       secret: "",
-      group: "果到雷达",
+      group: "果探雷达",
       proxyPort: 7899,
       nodeFilter: "",
       pinnedNode: "DIRECT",
@@ -135,11 +127,6 @@ let state: UiState = {
   settings: DEFAULT_SETTINGS,
   refreshing: false,
   ready: false,
-  update: null,
-  installing: false,
-  updateProgress: null,
-  updateError: null,
-  updateInstalled: false,
 };
 
 const listeners = new Set<() => void>();
@@ -256,6 +243,9 @@ function applyEvent(event: WatcherEvent): void {
 
 let unlisteners: UnlistenFn[] = [];
 let starting: Promise<void> | null = null;
+let connectionGeneration = 0;
+let catalogGeneration = 0;
+let settingsEventRevision = 0;
 
 /**
  * 连接后端。重复调用是安全的。
@@ -266,35 +256,73 @@ let starting: Promise<void> | null = null;
  */
 export function connect(): Promise<void> {
   if (starting) return starting;
+  const generation = ++connectionGeneration;
+  const current = () => generation === connectionGeneration;
+  let rowsRevision = 0;
+  let runningRevision = 0;
+  // Registration itself is asynchronous. A failed sibling or disconnect can happen
+  // before it finishes, so each late result must release its own subscription.
+  async function register<T>(channel: string, callback: (payload: T) => void): Promise<void> {
+    const unlisten = await listen<T>(channel, (event) => {
+      if (current()) callback(event.payload);
+    });
+    if (current()) unlisteners.push(unlisten);
+    else unlisten();
+  }
   starting = (async () => {
-    unlisteners = await Promise.all([
-      listen<WatcherEvent>(EVENT_CHANNEL, (e) => applyEvent(e.payload)),
-      listen<string>(NOTICE_CHANNEL, (e) => pushLog(e.payload)),
-      // 后端自己改了设置（结账完成后关闭自动结账）时同步过来，否则界面上的开关
-      // 还显示开启，下一次保存会把它重新打开。
-      listen<Settings>(SETTINGS_CHANNEL, (e) => update({ settings: e.payload })),
-    ]);
+    try {
+      await Promise.all([
+        register<WatcherEvent>(EVENT_CHANNEL, (event) => {
+          if (event.type === "cycleComplete") rowsRevision++;
+          if (event.type === "runStateChanged") runningRevision++;
+          applyEvent(event);
+        }),
+        register<string>(NOTICE_CHANNEL, pushLog),
+        // 后端自己改了设置（结账完成后关闭自动结账）时同步过来，否则界面上的开关
+        // 还显示开启，下一次保存会把它重新打开。
+        register<Settings>(SETTINGS_CHANNEL, (settings) => {
+          settingsEventRevision++;
+          update({ settings });
+        }),
+      ]);
+      if (!current()) return;
 
-    const [regions, categories, settings, rows, running] = await Promise.all([
-      invoke<Region[]>("list_regions"),
-      invoke<CategoryOption[]>("list_categories"),
-      invoke<Settings>("get_settings"),
-      invoke<TargetState[]>("get_snapshot"),
-      invoke<boolean>("is_running"),
-    ]);
-    update({ regions, categories, settings, rows, running, ready: true });
-    await loadCatalog(settings.locale);
-    // 启动时静默查一次。查不到就算了，不打扰用户 —— 网络不通、GitHub 抽风
-    // 都会走到这里，跟「有没有新版本」是两回事。
-    void checkForUpdate({ quiet: true });
+      const initialRevisions = { settingsRevision: settingsEventRevision, rowsRevision, runningRevision };
+      const [regions, categories, settings, rows, running] = await Promise.all([
+        invoke<Region[]>("list_regions"),
+        invoke<CategoryOption[]>("list_categories"),
+        invoke<Settings>("get_settings"),
+        invoke<TargetState[]>("get_snapshot"),
+        invoke<boolean>("is_running"),
+      ]);
+      if (!current()) return;
+      // Initial IPC replies may arrive after a newer event. Preserve that event's
+      // value instead of replacing it with an older startup snapshot.
+      update({
+        regions, categories, ready: true,
+        ...(settingsEventRevision === initialRevisions.settingsRevision ? { settings } : {}),
+        ...(rowsRevision === initialRevisions.rowsRevision ? { rows } : {}),
+        ...(runningRevision === initialRevisions.runningRevision ? { running } : {}),
+      });
+      await loadCatalog(state.settings.locale);
+      if (!current()) return;
+    } catch (err) {
+      if (!current()) return;
+      // A rejected startup must not remain cached: retry needs a fresh IPC session.
+      disconnect();
+      throw err;
+    }
   })();
   return starting;
 }
 
 export function disconnect(): void {
+  connectionGeneration++;
+  catalogGeneration++;
   for (const un of unlisteners) un();
   unlisteners = [];
   starting = null;
+  update({ ready: false });
 }
 
 export const watcherStore = { subscribe, getSnapshot };
@@ -303,13 +331,19 @@ export const watcherStore = { subscribe, getSnapshot };
 
 /** 载入某地区的门店与型号目录。 */
 export async function loadCatalog(locale: string): Promise<void> {
+  // A refresh may finish after the user selected another locale. It must not
+  // invalidate that locale's in-flight request by allocating a newer generation.
+  if (locale !== state.settings.locale) return;
+  const generation = ++catalogGeneration;
+  const current = () => generation === catalogGeneration && locale === state.settings.locale;
   try {
     const [stores, products] = await Promise.all([
       invoke<Store[]>("list_stores", { locale }),
       invoke<Product[]>("list_products", { locale }),
     ]);
-    update({ stores, products });
+    if (current()) update({ stores, products });
   } catch (err) {
+    if (!current()) return;
     // 目录读不出来不该让整个界面挂掉，但必须让用户知道下拉为什么是空的。
     update({ stores: [], products: [] });
     pushLog(`载入 ${locale} 的门店与型号失败：${String(err)}`);
@@ -361,13 +395,22 @@ function enqueueSettingsWrite<T>(operation: () => Promise<T>): Promise<T> {
   return next;
 }
 
-export function saveSettings(patch: Partial<Settings>): Promise<boolean> {
+export function saveSettings(
+  patch: Partial<Settings> | ((settings: Settings) => Partial<Settings>),
+): Promise<boolean> {
   return enqueueSettingsWrite(async () => {
     try {
+      const changes = typeof patch === "function" ? patch(state.settings) : patch;
+      const revision = settingsEventRevision;
+      const generation = connectionGeneration;
       const saved = await invoke<Settings>("save_settings", {
-        settings: { ...state.settings, ...patch },
+        settings: { ...state.settings, ...changes },
       });
-      update({ settings: saved });
+      // The backend can close checkout while the command finishes syncing its
+      // engine. Its newer event must survive an older full-settings reply.
+      if (revision === settingsEventRevision && generation === connectionGeneration) {
+        update({ settings: saved });
+      }
       return true;
     } catch (err) {
       pushLog(`保存设置失败：${String(err)}`);
@@ -381,8 +424,7 @@ export function setCategory(category: Category): void {
 }
 
 export async function changeLocale(locale: string): Promise<void> {
-  await saveSettings({ locale });
-  await loadCatalog(locale);
+  if (await saveSettings({ locale })) await loadCatalog(locale);
 }
 
 /** 用一句话描述一次目录刷新，例如「更新目录：门店 49 家、型号 73 个」。 */
@@ -412,8 +454,10 @@ async function writeTargets(targets: Target[]): Promise<boolean> {
   }
 }
 
-export function setTargets(targets: Target[]): Promise<boolean> {
-  return enqueueSettingsWrite(() => writeTargets(targets));
+export function setTargets(targets: Target[] | ((current: Target[]) => Target[])): Promise<boolean> {
+  return enqueueSettingsWrite(() =>
+    writeTargets(typeof targets === "function" ? targets(state.settings.targets) : targets),
+  );
 }
 
 /**
@@ -438,10 +482,14 @@ export function setProductBarkUrl(target: Target, barkUrl: string): Promise<bool
     else delete productBarkUrls[target.partNumber];
 
     try {
+      const revision = settingsEventRevision;
+      const generation = connectionGeneration;
       const saved = await invoke<Settings>("save_settings", {
         settings: { ...state.settings, productBarkUrls },
       });
-      update({ settings: saved });
+      if (revision === settingsEventRevision && generation === connectionGeneration) {
+        update({ settings: saved });
+      }
       pushLog(
         normalized
           ? `已为 ${target.productName} 设置专属 Bark。`
@@ -455,30 +503,44 @@ export function setProductBarkUrl(target: Target, barkUrl: string): Promise<bool
   });
 }
 
-export async function startWatching(): Promise<void> {
-  try {
-    await invoke("start_watching");
-    const running = await invoke<boolean>("is_running");
-    if (state.running !== running) {
-      update({ running });
-      pushLog(running ? "已开始监控。" : "启动命令已返回，但监控引擎没有进入运行状态。");
-    }
-  } catch (err) {
-    pushLog(`启动监控失败：${String(err)}`);
-  }
+let runStateWrite: Promise<void> = Promise.resolve();
+
+function enqueueRunStateWrite(operation: () => Promise<void>): Promise<void> {
+  const next = runStateWrite.then(operation);
+  runStateWrite = next.catch(() => undefined);
+  return next;
 }
 
-export async function stopWatching(): Promise<void> {
-  try {
-    await invoke("stop_watching");
-    const running = await invoke<boolean>("is_running");
-    if (state.running !== running) {
-      update({ running });
-      pushLog(running ? "暂停命令已返回，但监控引擎仍在运行。" : "已暂停监控。");
+export function startWatching(): Promise<void> {
+  return enqueueRunStateWrite(async () => {
+    try {
+      await settingsWrite;
+      await invoke("start_watching");
+      const running = await invoke<boolean>("is_running");
+      if (state.running !== running) {
+        update({ running });
+        pushLog(running ? "已开始监控。" : "启动命令已返回，但监控引擎没有进入运行状态。");
+      }
+    } catch (err) {
+      pushLog(`启动监控失败：${String(err)}`);
     }
-  } catch (err) {
-    pushLog(`暂停监控失败：${String(err)}`);
-  }
+  });
+}
+
+export function stopWatching(): Promise<void> {
+  return enqueueRunStateWrite(async () => {
+    try {
+      await invoke("stop_watching");
+      const running = await invoke<boolean>("is_running");
+      if (!running) update({ nextCheckAtMs: null, cooling: false });
+      if (state.running !== running) {
+        update({ running });
+        pushLog(running ? "暂停命令已返回，但监控引擎仍在运行。" : "已暂停监控。");
+      }
+    } catch (err) {
+      pushLog(`暂停监控失败：${String(err)}`);
+    }
+  });
 }
 
 export async function retryWatchingNow(): Promise<boolean> {
@@ -496,13 +558,15 @@ export async function retryWatchingNow(): Promise<boolean> {
   return false;
 }
 
-export async function setIntervalSeconds(seconds: number): Promise<void> {
+export async function setIntervalSeconds(seconds: number): Promise<boolean> {
   return enqueueSettingsWrite(async () => {
     try {
       const applied = await invoke<number>("set_interval", { seconds });
       update({ settings: { ...state.settings, intervalSeconds: applied } });
+      return true;
     } catch (err) {
       pushLog(`设置查询间隔失败：${String(err)}`);
+      return false;
     }
   });
 }
@@ -631,82 +695,22 @@ export async function openTargetProduct(target: Target): Promise<void> {
   }
 }
 
-// ---- 应用更新。只提示，不静默安装。
+// ---- 项目与下载入口。此派生版通过 GitHub Releases 手动更新。
 
-export async function checkForUpdate(opts?: { quiet?: boolean }): Promise<void> {
-  try {
-    const info = await invoke<UpdateInfo | null>("check_for_update");
-    update({ update: info });
-    if (!opts?.quiet) {
-      pushLog(info ? `发现新版本 ${info.version}。` : "已经是最新版本。");
-    }
-  } catch (err) {
-    // 检查更新失败不是故障，只是这次没查到。静默模式下连日志都不写，
-    // 免得每次断网启动都刷一条无用信息。
-    if (!opts?.quiet) pushLog(`检查更新失败：${String(err)}`);
-  }
-}
-
-/**
- * 下载并安装更新。
- *
- * 刻意由用户点击触发，绝不静默进行：这是个会在抢购当口挂着的程序，
- * 自作主张地下载、替换、重启，正好会赶上最不该被打断的时刻。
- */
-export async function installUpdate(): Promise<void> {
-  if (state.installing || state.updateInstalled) return;
-  update({ installing: true, updateError: null,
-    updateProgress: { phase: "checking", downloaded: 0, total: null } });
-  let unlisten: UnlistenFn | undefined;
-  try {
-    // 先监听再发起下载，保证首个进度事件不会丢失。
-    unlisten = await listen<UpdateProgress>("watcher://update-progress", (event) => {
-      update({ updateProgress: event.payload });
-    });
-    await invoke("install_update");
-    update({ updateInstalled: true, updateProgress: null });
-    pushLog("更新已安装，请退出并重新打开应用。");
-  } catch (err) {
-    const message = describeUpdateError(err);
-    update({ updateError: message, updateProgress: null });
-    pushLog(message);
-  } finally {
-    unlisten?.();
-    update({ installing: false });
-  }
-}
-
-export function dismissUpdate(): void {
-  if (state.installing) return;
-  update({ update: null, updateError: null });
-}
-
-/** 自动更新不可用时，打开本项目的完整安装包下载页。 */
+/** 打开本项目的完整安装包下载页。 */
 export async function openReleasePage(): Promise<void> {
   try {
-    await openUrl("https://github.com/suversal/apple-store-inventory-monitor/releases/latest");
+    await openUrl("https://github.com/thomasDJMax/guotan-radar/releases/latest");
   } catch (err) {
-    update({ updateError: `无法打开下载页：${String(err)}` });
+    pushLog(`无法打开下载页：${String(err)}`);
   }
 }
 
-async function openCommunityPage(url: string, label: string): Promise<void> {
+/** 打开本派生项目的源码与问题反馈页。 */
+export async function openProjectPage(): Promise<void> {
   try {
-    await openUrl(url);
+    await openUrl("https://github.com/thomasDJMax/guotan-radar");
   } catch (err) {
-    pushLog(`打开${label}失败：${String(err)}`);
+    pushLog(`无法打开 GitHub 项目页：${String(err)}`);
   }
-}
-
-/** 打开开源仓库主页，可从 Releases 下载最新版。 */
-export function openProjectPage(): Promise<void> {
-  return openCommunityPage(
-    "https://github.com/suversal/apple-store-inventory-monitor",
-    "GitHub 项目页",
-  );
-}
-
-/** 打开作者的 X 主页。 */
-export function openAuthorPage(): Promise<void> {
-  return openCommunityPage("https://x.com/suversal", "X 主页");
 }

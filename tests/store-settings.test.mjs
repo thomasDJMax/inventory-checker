@@ -179,3 +179,41 @@ test("a product-specific Bark URL can be set and cleared", async () => {
   assert.equal(await ctx.store.setProductBarkUrl(target, ""), true);
   assert.deepEqual(ctx.persisted().productBarkUrls, {});
 });
+
+test("queued nested settings updates read the last saved checkout settings", async () => {
+  const ctx = await setup();
+  ctx.block();
+  const first = ctx.store.saveSettings((settings) => ({ checkout: { ...settings.checkout, payment: "wechat" } }));
+  await tick();
+  const second = ctx.store.saveSettings((settings) => ({ checkout: { ...settings.checkout, contactFirstName: "Test" } }));
+  ctx.release();
+  await Promise.all([first, second]);
+  assert.equal(ctx.persisted().checkout.payment, "wechat");
+  assert.equal(ctx.persisted().checkout.contactFirstName, "Test");
+});
+
+test("queued target edits cannot restore an earlier removal", async () => {
+  const ctx = await setup();
+  const target = (partNumber) => ({
+    locale: "zh_CN", storeNumber: "R390", storeTitle: "Test", partNumber, productName: partNumber,
+  });
+  const removed = target("REMOVED/A");
+  const retained = target("RETAINED/A");
+  const added = target("ADDED/A");
+  await ctx.store.setTargets([removed, retained]);
+  ctx.block();
+  const removal = ctx.store.removeTarget(removed);
+  await tick();
+  const addition = ctx.store.setTargets((targets) => [...targets, added]);
+  ctx.release();
+  await Promise.all([removal, addition]);
+  assert.deepEqual(ctx.persisted().targets, [retained, added]);
+});
+
+test("interval save reports failure and success to preserve UI drafts", async () => {
+  const ctx = await setup();
+  assert.equal(await ctx.store.setIntervalSeconds(15), true);
+  invoke = async () => { throw new Error("disk unavailable"); };
+  assert.equal(await ctx.store.setIntervalSeconds(20), false);
+  assert.equal(ctx.store.watcherStore.getSnapshot().settings.intervalSeconds, 15);
+});
