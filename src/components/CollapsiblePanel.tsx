@@ -43,7 +43,7 @@ export function CollapsiblePanel({ id, icon, title, subtitle, summary, children 
       <h2 id={titleId} className="m-0">
         <button
           type="button"
-          className="flex w-full min-w-0 items-center gap-3 rounded-2xl p-4 text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full min-w-0 items-center gap-3 rounded-2xl p-5 text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => {
@@ -63,7 +63,7 @@ export function CollapsiblePanel({ id, icon, title, subtitle, summary, children 
         </button>
       </h2>
       {open ? (
-        <div id={bodyId} className="min-w-0 px-4 pb-4">
+        <div id={bodyId} className="min-w-0 px-5 pb-5">
           {children}
         </div>
       ) : null}

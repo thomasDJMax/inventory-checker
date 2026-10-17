@@ -902,7 +902,7 @@ export default function App() {
             </Alert>
           )}
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38.5rem] min-[900px]:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:min-h-[38.5rem] min-[900px]:grid-cols-[minmax(0,1fr)_22.5rem] min-[1080px]:grid-cols-[minmax(0,1fr)_25rem] min-[1440px]:grid-cols-[minmax(0,1fr)_26.25rem]">
             <div className="flex min-h-0 min-w-0 flex-col gap-4">
               <section className="surface-panel shrink-0 p-4" aria-labelledby="create-monitor-title">
                 <div className="mb-4 flex items-start justify-between gap-4">
@@ -1254,7 +1254,7 @@ export default function App() {
                           : ui.settings.deliveryRegion ? "已生效" : "未设置"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 gap-3">
                     <Select
                       value={deliveryOptions.states.some((option) => option.value === deliveryDraft.state) ? deliveryDraft.state : ""}
                       disabled={deliveryOptionsLoading || deliveryOptions.states.length === 0}
@@ -1265,7 +1265,7 @@ export default function App() {
                         void refreshDeliveryOptions(value);
                       }}
                     >
-                      <SelectTrigger aria-label="省份" className="control-surface h-9 w-full min-w-0 px-2 text-xs">
+                      <SelectTrigger aria-label="省份" className="control-surface w-full min-w-0">
                         <SelectValue placeholder="省份" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1284,7 +1284,7 @@ export default function App() {
                         void refreshDeliveryOptions(deliveryDraft.state, value);
                       }}
                     >
-                      <SelectTrigger aria-label="城市" className="control-surface h-9 w-full min-w-0 px-2 text-xs">
+                      <SelectTrigger aria-label="城市" className="control-surface w-full min-w-0">
                         <SelectValue placeholder="城市" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1304,7 +1304,7 @@ export default function App() {
                         void persistDeliveryRegion(next);
                       }}
                     >
-                      <SelectTrigger aria-label="区" className="control-surface h-9 w-full min-w-0 px-2 text-xs">
+                      <SelectTrigger aria-label="区" className="control-surface w-full min-w-0">
                         <SelectValue placeholder="区" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1378,7 +1378,7 @@ export default function App() {
                       onCheckedChange={(value) => void saveSettings({ soundEnabled: value })}
                     />
                   </div>
-                  <div className="setting-row flex-wrap gap-2 py-1.5">
+                  <div className="grid min-w-0 gap-2 px-3 py-2">
                     <Label htmlFor="open-on-hit" className="flex items-center gap-2 text-sm font-normal">
                       <ShoppingBag className="size-4 text-muted-foreground" aria-hidden="true" />到货后打开
                     </Label>
@@ -1388,7 +1388,7 @@ export default function App() {
                         void saveSettings({ openOnHit: value as OpenOnHit })
                       }
                     >
-                      <SelectTrigger id="open-on-hit" className="h-9 w-[13.5rem] max-w-full bg-background/45" aria-label="到货后打开">
+                      <SelectTrigger id="open-on-hit" className="h-10 w-full min-w-0 bg-background/45" aria-label="到货后打开">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent align="end">

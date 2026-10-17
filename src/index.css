@@ -205,6 +205,14 @@
     @apply grid min-w-0 gap-1.5;
   }
 
+  .workspace-sidebar .field-group {
+    @apply gap-2;
+  }
+
+  .workspace-sidebar [data-slot="select-trigger"] {
+    @apply min-h-10;
+  }
+
   .control-label {
     @apply flex h-5 items-center gap-1.5 text-xs font-medium text-muted-foreground;
   }
@@ -226,7 +234,15 @@
   }
 
   .setting-row {
-    @apply flex min-h-10 items-center justify-between rounded-lg px-2.5 transition-colors hover:bg-muted/45;
+    @apply grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg px-3 py-2 transition-colors hover:bg-muted/45;
+  }
+
+  .setting-row > [data-slot="label"] {
+    @apply min-w-0 leading-5;
+  }
+
+  .setting-row svg {
+    @apply shrink-0;
   }
 
 }

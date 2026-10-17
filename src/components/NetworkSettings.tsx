@@ -472,7 +472,7 @@ export function NetworkSettings({
             />
             <FieldHint>Clash → 设置 → Clash 设置 → 外部控制中的「监听地址」</FieldHint>
           </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_6rem] gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3">
             <div className="field-group">
               <Label htmlFor="clash-secret" className="control-label">密钥</Label>
               <Input
@@ -501,7 +501,7 @@ export function NetworkSettings({
               <FieldHint>脚本 listeners 的端口</FieldHint>
             </div>
           </div>
-          <div className="grid min-w-0 grid-cols-2 gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3">
             <div className="field-group">
               <Label htmlFor="clash-group" className="control-label">策略组</Label>
               <Input id="clash-group" className="control-surface select-text" placeholder="库存查询器" {...text("group")} />

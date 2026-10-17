@@ -2,10 +2,10 @@
 
 <img src="docs/branding/app-icon-1024.png" alt="库存查询器应用图标" width="160" height="160" />
 
-独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.2**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
+独立维护的 Apple Store 取货库存监控工具，当前版本 **1.1.3**。基于 [suversal/果到雷达 v1.0.22](https://github.com/suversal/apple-store-inventory-monitor/tree/v1.0.22) 修复功能与界面后更名，不代表上游官方发布。
 
 [检查与打包模板](build-templates/README.md)
-[![源码版本: v1.1.2](https://img.shields.io/badge/source-v1.1.2-blue)](package.json)
+[![源码版本: v1.1.3](https://img.shields.io/badge/source-v1.1.3-blue)](package.json)
 [下载与发布记录](https://github.com/thomasDJMax/inventory-checker/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
@@ -21,10 +21,10 @@
 
 ## 本版更新
 
-- 将「监控设置」移到右侧：窗口宽度达到 900 像素时，左侧显示新建监控和监控列表，右侧显示设置、查询线路与活动日志；默认 1080 × 820 窗口即可左右并排使用。
-- 右侧栏宽度为 20rem，可独立纵向滚动；小于 900 像素时恢复纵向布局。
-- 新建监控表单在常规双栏窗口中采用两列，超宽窗口使用四列；监控列表保留横向滚动与固定在右侧的删除按钮。
-- 沿用 1.1.1 的「库存查询器」名称、新图标与已有配置；此前的查询调度、连接重试和设置保存修复继续保留。
+- 加宽右侧设置栏：窗口宽度达到 900、1080、1440 像素时，侧栏分别使用 360、400、420 像素；默认 1080 × 820 窗口中的设置栏由 320 像素加宽到 400 像素。
+- 省、市、区选择框改为各占一行；「到货后打开」的说明与下拉框上下排列，下拉框占满可用宽度，让长选项有更多显示空间。
+- 开关行在文字与开关之间保留 16 像素间距，长标签可自然换行；查询线路的密钥、端口、策略组和关键词改为单列，折叠面板内边距增至 20 像素。
+- 沿用 1.1.2 的左右分栏与侧栏独立滚动；小于 900 像素时恢复纵向布局。监控列表保留横向滚动与固定删除列，名称、图标和已有配置保持不变。
 
 完整记录见 [CHANGELOG.md](CHANGELOG.md)，新图标的生成提示词保存在 [docs/branding/icon-prompt.txt](docs/branding/icon-prompt.txt)。上游旧品牌的宣传图与截图保留在 `docs/promo/`、`docs/screenshots/`，仅作为历史资源，不代表本版界面。
 
@@ -58,7 +58,7 @@ Apple 可能限流或调整接口，库存也可能在提醒后立即变化。�
 
 ## 安装
 
-打开 [库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，在 **Assets** 中下载 `inventory-checker_1.1.2_aarch64.dmg`，源码归档为 `inventory-checker_1.1.2_source.zip`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
+打开 [库存查询器 Releases](https://github.com/thomasDJMax/inventory-checker/releases)，在 **Assets** 中下载 `inventory-checker_1.1.3_aarch64.dmg`，源码归档为 `inventory-checker_1.1.3_source.zip`。本次只发布 Apple Silicon Mac 安装包，其他平台请按[从源码运行](#从源码运行)自行构建。每个版本的变化见 [更新记录](CHANGELOG.md)。
 
 ### macOS Apple Silicon
 
@@ -67,7 +67,7 @@ Apple 可能限流或调整接口，库存也可能在提醒后立即变化。�
 3. 对照同一 Release 的 `SHA256SUMS.txt` 校验安装包：
 
 ```bash
-shasum -a 256 inventory-checker_1.1.2_aarch64.dmg
+shasum -a 256 inventory-checker_1.1.3_aarch64.dmg
 ```
 
 ### 其他平台自行构建
@@ -77,14 +77,14 @@ shasum -a 256 inventory-checker_1.1.2_aarch64.dmg
 Linux 打包继续使用 ASCII 名称 `guotan-radar`，桌面显示名称为「库存查询器」。若自行构建 `.deb`，示例安装命令如下（Ubuntu 24.04 构建的包需要 glibc 2.39 或更新版本）：
 
 ```bash
-sudo apt install "./inventory-checker_1.1.2_amd64.deb"
+sudo apt install "./inventory-checker_1.1.3_amd64.deb"
 ```
 
 自行构建 AppImage 后可执行：
 
 ```bash
-chmod +x "./inventory-checker_1.1.2_amd64.AppImage"
-"./inventory-checker_1.1.2_amd64.AppImage"
+chmod +x "./inventory-checker_1.1.3_amd64.AppImage"
+"./inventory-checker_1.1.3_amd64.AppImage"
 ```
 
 AppImage 需要 FUSE 2；Ubuntu 24.04 可安装 `libfuse2t64`，或使用 `--appimage-extract-and-run`。Windows 自行构建会生成 NSIS `*-setup.exe`，没有操作系统开发者签名。Linux 需要另行安装 Chrome、Edge 或 PATH 中的 Chromium。
@@ -645,7 +645,7 @@ listeners:
 
 本分支直接基于 suversal 果到雷达 `v1.0.22`（`7f9e86d642e9b662e7a4bc9ecc156bbd43f070f9`）。Chromium 查询、多个产品品类、多门店监控、提示音、Bark、Clash 查询线路和可选自动结账均承自上游，不作为库存查询器新增功能。
 
-本分支新增了查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识、手动更新入口和新图标。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.2`、`1.1.1`、`1.1.0` 与 `1.0.23-local.1`。
+本分支新增了查询调度、前端连接及状态竞态、设置保存与响应式布局修复，以及独立应用名称、包标识、手动更新入口和新图标。`CHANGELOG.md` 中 `1.0.22` 及更早记录保留上游的原始名称和历史；本分支修改见 `1.1.3`、`1.1.2`、`1.1.1`、`1.1.0` 与 `1.0.23-local.1`。
 
 ## Apple 查询会话
 
@@ -789,9 +789,9 @@ pnpm tauri build --ci -- --locked
 
 当前 GitHub OAuth 授权没有 `workflow` scope，因此本仓库**未启用 GitHub Actions**，也没有宣称自动 CI 已运行。为保留构建方法，CI 与打包配置作为普通 YAML 模板放在 [build-templates/](build-templates/README.md)，不会自动执行；有相应仓库权限和授权时，可按模板说明自行复制到 `.github/workflows/`。
 
-[打包模板](build-templates/packages.yml)启用后只允许手动 `workflow_dispatch`，在 macOS、Windows 和 Linux runner 上原生构建，完成签名或安装检查后上传 Actions artifacts；它不会创建 Release 或更新清单。`1.1.0` 是本机验证后发布的版本，`1.1.1` 与 `1.1.2` 沿用本机验证后手动发布的流程；公开 Release 只提供本机构建的 macOS Apple Silicon 包。
+[打包模板](build-templates/packages.yml)启用后只允许手动 `workflow_dispatch`，在 macOS、Windows 和 Linux runner 上原生构建，完成签名或安装检查后上传 Actions artifacts；它不会创建 Release 或更新清单。`1.1.0` 是本机验证后发布的版本，`1.1.1` 与 `1.1.2` 沿用本机验证后手动发布的流程；`1.1.3` 继续采用同一流程，公开 Release 只提供本机构建的 macOS Apple Silicon 包。
 
-发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.2`）一致，并在对应平台验证安装包后再发布。
+发布前请确认 `package.json`、工作区 `Cargo.toml`、`src-tauri/tauri.conf.json` 与版本标签（本版 `v1.1.3`）一致，并在对应平台验证安装包后再发布。
 
 ## 代码结构
 
@@ -825,9 +825,9 @@ src/
 
 ## 验证范围
 
-1.1.2 只调整响应式布局。59 项前端测试通过；使用生产构建资源与隔离的 Tauri 测试数据，在应用内浏览器中检查了 900 × 640、1080 × 820、1280 × 820 双栏布局及 720 × 820 纵向布局，页面没有横向溢出。面板折叠、控件键盘可达、侧栏纵向滚动、表格横向滚动与固定删除列已检查，浏览器没有相关控制台错误。
+1.1.3 只调整设置侧栏宽度和控件间距。59 项前端测试通过；使用生产构建资源与隔离的 Tauri 测试数据，在应用内浏览器中检查了 900 × 640、1080 × 820、1440 × 820 双栏布局及 720 × 820 纵向布局，页面没有横向溢出。长省市名称、教育商店购物袋选项均完整显示；开关与标签间距为 16 像素，开关宽度保持 32 像素。面板折叠、控件键盘可达、侧栏纵向滚动、表格横向滚动与固定删除列检查通过，浏览器没有相关控制台错误。
 
-macOS Apple Silicon 应用已构建、通过 ad-hoc 签名与 DMG 完整性检查并安装。本机原生窗口中已通过截图确认右侧设置栏，并检查右侧独立滚动时左侧列表保持原位；升级前后配置文件校验一致。
+macOS Apple Silicon 应用已构建，通过 ad-hoc 签名、DMG 完整性、包内应用与构建产物一致性检查并安装。原生窗口截图确认加宽后的设置栏和上下排列的控件，右侧独立滚动时左侧保持原位；升级前后配置文件校验一致。
 
 此前版本已在 macOS Apple Silicon 上完成前端及 Rust 离线回归、应用构建、签名与 DMG 完整性检查，并曾检查原生窗口、门店搜索和设置恢复。只读 Apple 查询也曾取得部分型号的可解析结果；这些历史结果不代表本版重新验证了实时库存。缺少取货数据的响应不能当成无货。
 
