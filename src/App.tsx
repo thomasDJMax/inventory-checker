@@ -109,6 +109,7 @@ import {
 import { describeBrowserFailure, describeBrowserRecovery, describeDelivery, describeMonitorStatus, describePickupDate, type DeliveryTone } from "@/lib/monitorLog";
 import { compareNewestProducts, sortMonitorsNewestFirst } from "@/lib/productOrder";
 import { filterMonitorRows } from "@/lib/monitorFilter";
+import { groupMonitorRows } from "@/lib/monitorGroups";
 
 const EMPTY_DELIVERY_LOCALITIES: DeliveryLocalities = {
   states: [],
@@ -149,27 +150,19 @@ const TONE_CLASS: Record<StatusTone, string> = {
   pending: "bg-transparent text-muted-foreground/70 border-border border-dashed",
 };
 
-const TONE_DOT: Record<StatusTone, string> = {
-  inStock: "bg-in-stock shadow-[0_0_10px_var(--in-stock)]",
-  outOfStock: "bg-out-of-stock",
-  presale: "bg-presale",
-  comingSoon: "bg-coming-soon",
-  pickupUnsupported: "bg-pickup-unsupported",
-  notForSale: "bg-not-for-sale",
-  unknown: "bg-unknown",
-  pending: "bg-muted-foreground/50",
-};
-
 function StatusBadge({ availability, pickupDetails }: { availability: Availability; pickupDetails?: PickupDetails }) {
   const { label, tone, detail } = describeMonitorStatus({ availability, pickupDetails });
   const pickupDate = availability.kind === "in_stock" ? describePickupDate(pickupDetails?.pickupQuote) : null;
+  const StatusIcon = tone === "inStock" ? PackageCheck
+    : tone === "outOfStock" || tone === "pickupUnsupported" || tone === "notForSale" ? PackageX
+      : tone === "unknown" ? AlertTriangle : Clock3;
   const badge = (
     <span className="inline-flex min-w-0 max-w-full flex-col items-center gap-0.5">
       <Badge
         variant="outline"
-        className={`h-auto min-h-6 min-w-0 max-w-full justify-center gap-1.5 whitespace-normal px-2 py-1 font-medium ${TONE_CLASS[tone]}`}
+        className={`h-auto min-h-7 min-w-0 max-w-full justify-center gap-1.5 whitespace-normal px-2 py-1 font-semibold ${TONE_CLASS[tone]}`}
       >
-        <span className={`size-1.5 shrink-0 rounded-full ${TONE_DOT[tone]}`} aria-hidden="true" />
+        <StatusIcon className="size-3 shrink-0" aria-hidden="true" />
         <span className="min-w-0 text-center [overflow-wrap:anywhere]">{label}</span>
       </Badge>
       {pickupDate ? <span className="max-w-full whitespace-normal text-center text-[10px] leading-3 text-in-stock tabular-nums [overflow-wrap:anywhere]">{pickupDate} 可取</span> : null}
@@ -206,12 +199,12 @@ function DeliveryBadge({ pickupDetails, lastCheckedMs }: { pickupDetails?: Picku
       <TooltipTrigger asChild>
         <span
           tabIndex={0}
-          className={`inline-grid min-w-0 max-w-full cursor-help grid-cols-[auto_minmax(0,1fr)] items-center gap-x-1.5 rounded-lg border px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${DELIVERY_CLASS[delivery.tone]}`}
+          className={`inline-flex min-w-0 max-w-full cursor-help flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md border px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${DELIVERY_CLASS[delivery.tone]}`}
           aria-label={`预计送货：${delivery.detail}；${delivery.timing}`}
         >
-          <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+          <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
           <span className="min-w-0 whitespace-normal text-xs font-semibold leading-4 tabular-nums [overflow-wrap:anywhere]">{delivery.label}</span>
-          <span className="col-start-2 min-w-0 whitespace-normal text-[10px] leading-3 opacity-80 [overflow-wrap:anywhere]">{delivery.timing}</span>
+          <span className="min-w-0 whitespace-normal text-[10px] leading-4 opacity-80 [overflow-wrap:anywhere]">{delivery.timing}</span>
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-90">Apple 预计送货：{delivery.detail}</TooltipContent>
@@ -656,6 +649,7 @@ export default function App() {
 
   const sortedRows = useMemo(() => sortMonitorsNewestFirst(ui.rows), [ui.rows]);
   const visibleRows = useMemo(() => filterMonitorRows(sortedRows, monitorQuery), [sortedRows, monitorQuery]);
+  const monitorGroups = useMemo(() => groupMonitorRows(visibleRows), [visibleRows]);
   const hasMonitorQuery = monitorQuery.trim().length > 0;
   const browserFailure = describeBrowserFailure(ui.rows);
   const browserRunningLabel = secondsUntilNextCheck !== null && secondsUntilNextCheck > 0
@@ -1067,6 +1061,7 @@ export default function App() {
                     <h2 id="monitor-list-title" className="text-sm font-semibold">监控列表</h2>
                     <span id="monitor-filter-summary" role="status" aria-live="polite" className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs tabular-nums text-muted-foreground">
                       {hasMonitorQuery ? `${visibleRows.length} / ${ui.rows.length}` : ui.rows.length} 项
+                      {ui.rows.length > 0 ? <span> · {hasMonitorQuery ? "匹配 " : ""}{monitorGroups.length} 家门店</span> : null}
                       {hasMonitorQuery ? <span className="sr-only">，仅筛选显示，不影响后台监控。</span> : null}
                     </span>
                   </div>
@@ -1127,96 +1122,112 @@ export default function App() {
                     <Button variant="ghost" size="sm" className="h-8 text-primary" onClick={() => { setMonitorQuery(""); monitorSearchRef.current?.focus(); }}>清除筛选</Button>
                   </div>
                 ) : (
-                  <>
                   <ScrollArea aria-label="监控列表内容，可上下滚动" className="min-h-0 min-w-0 flex-1 [&_[data-slot=table-container]]:overflow-visible">
                     <Table className="monitor-table w-full table-fixed">
-                      <caption className="sr-only">门店与取货状态、完整型号与预计送货、监控操作</caption>
+                      <caption className="sr-only">按门店分组的监控列表：完整型号与预计送货、取货状态、监控操作。门店摘要仅统计当前显示的型号。待确认包括待查询、待开放或暂停取货；查询异常对应右侧未确认项目。</caption>
                       <colgroup>
-                        <col className="monitor-store-column" />
                         <col />
+                        <col className="monitor-status-column" />
                         <col className="monitor-actions-column" />
                       </colgroup>
                       <TableHeader className="sticky top-0 z-10 bg-card/95">
                         <TableRow className="hover:bg-transparent">
-                          <TableHead scope="col" className="px-3 text-[11px] text-muted-foreground">门店与取货</TableHead>
                           <TableHead scope="col" className="px-3 text-[11px] text-muted-foreground">型号与送货</TableHead>
+                          <TableHead scope="col" className="px-2 text-center text-[11px] text-muted-foreground">取货状态</TableHead>
                           <TableHead scope="col" className="px-0 text-center text-[11px] text-muted-foreground">操作</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {visibleRows.map((row) => {
-                          const rowKey = targetKey(row.target);
-                          const removing = removingTargetKeys.has(rowKey);
-                          return (
-                            <TableRow key={rowKey} className="group odd:bg-muted/10 hover:bg-primary/4 focus-within:bg-muted/25">
-                              <TableCell className="monitor-store-cell min-w-0 align-top whitespace-normal px-3 py-3">
-                                <div className="monitor-store-name text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]" title={row.target.storeTitle}>
-                                  {row.target.storeTitle}
+                      {monitorGroups.map((storeGroup) => (
+                        <TableBody key={storeGroup.key} aria-labelledby={`monitor-store-${encodeURIComponent(storeGroup.key)}`}>
+                          <TableRow className="monitor-store-heading border-t border-border/70 bg-muted/55 hover:bg-muted/55">
+                            <TableHead scope="rowgroup" colSpan={3} className="h-auto whitespace-normal px-3 py-2.5">
+                              <div className="monitor-store-heading-layout flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                <div className="flex min-w-0 flex-1 items-start gap-2">
+                                  <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                  <div className="min-w-0">
+                                    <h3 id={`monitor-store-${encodeURIComponent(storeGroup.key)}`} className="monitor-store-name text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]">{storeGroup.storeTitle}</h3>
+                                    <p className="mt-0.5 text-[10px] font-normal leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+                                      {ui.regions.find((region) => region.locale === storeGroup.locale)?.title ?? storeGroup.locale} · {storeGroup.storeNumber} · {hasMonitorQuery ? "匹配 " : ""}{storeGroup.rows.length} 型号
+                                    </p>
+                                  </div>
                                 </div>
-                                <div className="mt-1.5 min-w-0">
+                                <div role="group" className="monitor-store-summary flex min-w-0 max-w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-medium leading-4 tabular-nums" aria-label={`${hasMonitorQuery ? "匹配型号" : "门店"}取货汇总`}>
+                                  {storeGroup.counts.inStock > 0 ? <span className="inline-flex items-center gap-1 rounded-md bg-in-stock/12 px-1.5 py-1 font-semibold text-in-stock"><PackageCheck className="size-3 shrink-0" aria-hidden="true" />{storeGroup.counts.inStock} 有货</span> : null}
+                                  {storeGroup.counts.unavailable > 0 ? <span className="text-muted-foreground">{storeGroup.counts.unavailable} 不可取货</span> : null}
+                                  {storeGroup.counts.pending > 0 ? <span className="text-muted-foreground">{storeGroup.counts.pending} 待确认</span> : null}
+                                  {storeGroup.counts.unconfirmed > 0 ? <span className="text-unknown">{storeGroup.counts.unconfirmed} 查询异常</span> : null}
+                                </div>
+                              </div>
+                            </TableHead>
+                          </TableRow>
+                          {storeGroup.rows.map((row) => {
+                            const rowKey = targetKey(row.target);
+                            const removing = removingTargetKeys.has(rowKey);
+                            return (
+                              <TableRow key={rowKey} data-availability={row.availability.kind} className="monitor-model-row group hover:bg-primary/4 focus-within:bg-muted/25">
+                                <TableCell className="monitor-product-cell min-w-0 align-top whitespace-normal px-3 py-2.5">
+                                  <button
+                                    className="monitor-product-name block max-w-full rounded-sm text-left text-[13px] font-medium leading-5 text-foreground/90 outline-none [overflow-wrap:anywhere] hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    aria-label={`打开商品页：${row.target.productName}`}
+                                    title={row.target.productName}
+                                    onClick={() => void openTargetProduct(row.target)}
+                                  >
+                                    {row.target.productName}
+                                  </button>
+                                  {row.target.companionPart && row.target.kitPart ? (
+                                    <WatchBandPicker
+                                      target={row.target}
+                                      defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
+                                      disabled={isAdding}
+                                    />
+                                  ) : null}
+                                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] leading-4 text-muted-foreground">
+                                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                                      <Truck className="size-3 shrink-0" aria-hidden="true" />
+                                      <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
+                                    </span>
+                                    <span className="inline-flex min-w-0 items-center gap-1.5 tabular-nums" aria-label={row.lastCheckedMs !== null ? `最后检查：${formatTime(row.lastCheckedMs)}` : "尚未检查"}>
+                                      <Clock3 className="size-3 shrink-0" aria-hidden="true" />
+                                      {row.lastCheckedMs !== null ? `检查 ${formatTime(row.lastCheckedMs)}` : "尚未检查"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="monitor-status-cell min-w-0 align-top whitespace-normal px-2 py-2.5 text-center">
                                   <StatusBadge availability={row.availability} pickupDetails={row.pickupDetails} />
-                                </div>
-                              </TableCell>
-                              <TableCell className="monitor-product-cell min-w-0 align-top whitespace-normal px-3 py-3">
-                                <button
-                                  className="monitor-product-name block max-w-full rounded-sm text-left text-[13px] font-medium leading-5 text-foreground/90 outline-none [overflow-wrap:anywhere] hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                  aria-label={`打开商品页：${row.target.productName}`}
-                                  title={row.target.productName}
-                                  onClick={() => void openTargetProduct(row.target)}
-                                >
-                                  {row.target.productName}
-                                </button>
-                                {row.target.companionPart && row.target.kitPart ? (
-                                  <WatchBandPicker
-                                    target={row.target}
-                                    defaultCompanionPart={ui.products.find((product) => product.partNumber === row.target.partNumber)?.companionPart}
-                                    disabled={isAdding}
-                                  />
-                                ) : null}
-                                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] leading-4 text-muted-foreground">
-                                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
-                                    <Truck className="size-3 shrink-0" aria-hidden="true" />
-                                    <DeliveryBadge pickupDetails={row.pickupDetails} lastCheckedMs={row.lastCheckedMs} />
-                                  </span>
-                                  <span className="inline-flex min-w-0 items-center gap-1.5 tabular-nums" aria-label={row.lastCheckedMs !== null ? `最后检查：${formatTime(row.lastCheckedMs)}` : "尚未检查"}>
-                                    <Clock3 className="size-3 shrink-0" aria-hidden="true" />
-                                    {row.lastCheckedMs !== null ? `检查 ${formatTime(row.lastCheckedMs)}` : "尚未检查"}
-                                  </span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="monitor-actions-cell align-top px-0 py-3">
-                                <div className="monitor-row-actions">
-                                  <ProductBarkRoute
-                                    target={row.target}
-                                    customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
-                                    disabled={isAdding}
-                                    compact
-                                  />
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                        aria-label={`${removing ? "正在删除监控" : "删除监控"}：${row.target.storeTitle} · ${row.target.productName}`}
-                                        aria-busy={removing}
-                                        disabled={isAdding || removing}
-                                        onClick={() => void onRemove(row.target)}
-                                      >
-                                        {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>删除这条监控</TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
+                                </TableCell>
+                                <TableCell className="monitor-actions-cell align-top px-0 py-2.5">
+                                  <div className="monitor-row-actions">
+                                    <ProductBarkRoute
+                                      target={row.target}
+                                      customUrl={ui.settings.productBarkUrls[row.target.partNumber]}
+                                      disabled={isAdding}
+                                      compact
+                                    />
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                          aria-label={`${removing ? "正在删除监控" : "删除监控"}：${row.target.storeTitle} · ${row.target.productName}`}
+                                          aria-busy={removing}
+                                          disabled={isAdding || removing}
+                                          onClick={() => void onRemove(row.target)}
+                                        >
+                                          {removing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>删除这条监控</TooltipContent>
+                                    </Tooltip>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      ))}
                     </Table>
                   </ScrollArea>
-                  </>
                 )}
               </section>
             </div>

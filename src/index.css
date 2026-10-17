@@ -258,8 +258,8 @@
   min-width: 0;
 }
 
-.monitor-store-column {
-  width: 30%;
+.monitor-status-column {
+  width: 112px;
 }
 
 .monitor-actions-column {
@@ -273,7 +273,28 @@
   gap: 8px;
 }
 
+.monitor-model-row[data-availability="in_stock"] {
+  background: color-mix(in oklch, var(--in-stock) 5%, transparent);
+}
+
+.monitor-model-row[data-availability="in_stock"] > :first-child {
+  box-shadow: inset 3px 0 0 var(--in-stock);
+}
+
+.monitor-model-row[data-availability="in_stock"] .monitor-product-name {
+  font-weight: 600;
+}
+
 @container monitor-list (max-width: 460px) {
+  .monitor-store-summary {
+    flex-basis: 100%;
+    padding-left: 22px;
+  }
+
+  .monitor-status-column {
+    width: 88px;
+  }
+
   .monitor-actions-column {
     width: 40px;
   }
@@ -283,9 +304,8 @@
     gap: 4px;
   }
 
-  .monitor-store-cell,
   .monitor-product-cell,
-  .monitor-table th:not(:last-child) {
+  .monitor-store-heading > th {
     padding-inline: 8px;
   }
 
