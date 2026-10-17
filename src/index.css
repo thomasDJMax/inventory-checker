@@ -249,6 +249,51 @@
 
 }
 
+.monitor-list-panel {
+  container-name: monitor-list;
+  container-type: inline-size;
+}
+
+.monitor-table {
+  min-width: 0;
+}
+
+.monitor-store-column {
+  width: 30%;
+}
+
+.monitor-actions-column {
+  width: 72px;
+}
+
+.monitor-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@container monitor-list (max-width: 460px) {
+  .monitor-actions-column {
+    width: 40px;
+  }
+
+  .monitor-row-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .monitor-store-cell,
+  .monitor-product-cell,
+  .monitor-table th:not(:last-child) {
+    padding-inline: 8px;
+  }
+
+  .monitor-actions-cell {
+    padding-block: 8px;
+  }
+}
+
 @media (min-width: 900px) and (max-height: 720px) {
   .create-monitor-panel {
     padding: 12px;
