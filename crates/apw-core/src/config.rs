@@ -474,8 +474,15 @@ impl Settings {
             {
                 continue;
             }
-            if seen.insert(t.key()) {
-                kept.push(t.clone());
+            // 判断用 trim、写回也要用 trim。只判空不回写的话，「R683 」和
+            // 「R683」会被当成两个不同的目标绕过一起去重，而前者发到 Apple
+            // 的请求永远查不到东西。
+            let mut target = t.clone();
+            target.locale = target.locale.trim().to_string();
+            target.store_number = target.store_number.trim().to_string();
+            target.part_number = target.part_number.trim().to_string();
+            if seen.insert(target.key()) {
+                kept.push(target);
             }
         }
         self.targets = kept;
@@ -1056,6 +1063,23 @@ mod tests {
         assert_eq!(s.targets.len(), 2);
         assert_eq!(s.targets[0].store_number, "R683");
         assert_eq!(s.targets[1].store_number, "R448");
+    }
+
+    #[test]
+    fn 规范化写回目标字段的首尾空白() {
+        let mut padded = 目标(" R683 ", " MG724CH/A ");
+        padded.locale = " zh_CN ".into();
+        padded.store_title = "上海-环球港".into();
+        let mut s = Settings {
+            targets: vec![
+                padded,
+                // 去掉空白后与上一条完全相同，必须合并掉，而不是当成另一条目标。
+                目标("R683", "MG724CH/A"),
+            ],
+            ..Settings::default()
+        };
+        s.normalize();
+        assert_eq!(s.targets, vec![目标("R683", "MG724CH/A")]);
     }
 
     #[test]
