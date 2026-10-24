@@ -578,19 +578,39 @@ pub struct ScheduleHint {
     pub cooling: bool,
 }
 
+/// 一次取货请求要带的零件号：监控的型号加上 Watch 送货搭配的表带。
+///
+/// Chromium 实现一直是这样拼的；AppleClient 这条兜底路径漏了搭配件时，
+/// 表带库存和取货结论会缺一块，两个实现的语义就对不上了。
+fn pickup_parts(targets: &[Target]) -> Vec<String> {
+    let mut parts: Vec<String> = targets
+        .iter()
+        .map(|target| target.part_number.clone())
+        .collect();
+    for companion in targets
+        .iter()
+        .filter_map(|target| target.companion_part.as_ref())
+    {
+        if !parts.contains(companion) {
+            parts.push(companion.clone());
+        }
+    }
+    parts.sort_unstable();
+    parts.dedup();
+    parts
+}
+
 impl Fetcher for AppleClient {
     async fn pickup_message(
         &self,
         region: &'static Region,
         store_number: &str,
         targets: &[Target],
+        // 这条实现没有单独的送货查询接口：响应里的 deliveryMessage 已经
+        // 合并进 pickup_details，因此不需要额外的送货请求。
         _delivery_region: Option<&DeliveryRegion>,
     ) -> Result<StoreAvailability, ApiError> {
-        let parts: Vec<String> = targets
-            .iter()
-            .map(|target| target.part_number.clone())
-            .collect();
-        AppleClient::pickup_message(self, region, store_number, &parts).await
+        AppleClient::pickup_message(self, region, store_number, &pickup_parts(targets)).await
     }
 }
 
@@ -863,5 +883,50 @@ pub fn availability_from(pickup_display: &str) -> Availability {
             field: "pickupDisplay".into(),
             raw: other.to_string(),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pickup_parts;
+    use crate::model::Target;
+
+    fn target(part: &str, companion: Option<&str>) -> Target {
+        Target {
+            locale: "zh_CN".into(),
+            store_number: "R683".into(),
+            store_title: "上海-环球港".into(),
+            part_number: part.into(),
+            product_name: part.into(),
+            companion_part: companion.map(str::to_string),
+            companion_name: None,
+            kit_part: None,
+            pickup_location: None,
+        }
+    }
+
+    #[test]
+    fn 直连取货请求带上watch搭配表带并去重排序() {
+        let targets = [
+            target("MJCX4CH/B", Some("MKDY4FE/A")),
+            target("MJCX4CH/B", None),
+            target("MG724CH/A", Some("MKDY4FE/A")),
+        ];
+        assert_eq!(
+            pickup_parts(&targets),
+            vec![
+                "MG724CH/A".to_string(),
+                "MJCX4CH/B".to_string(),
+                "MKDY4FE/A".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn 没有搭配件时只查监控型号() {
+        assert_eq!(
+            pickup_parts(&[target("MG724CH/A", None)]),
+            vec!["MG724CH/A".to_string()]
+        );
     }
 }
