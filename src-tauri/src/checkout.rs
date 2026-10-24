@@ -239,7 +239,12 @@ fn verify_items(items: &[LineItem], product_name: &str) -> Result<(), String> {
         ));
     }
     let quantity = item.quantity.trim();
-    if !quantity.is_empty() && quantity != "1" {
+    // 数量必须显式读到 1。读不到数量（页面结构变了、文案不是中文）时，
+    // 「默认 1 件」会放过购物袋里实际有 2 件的情况 —— 那等于买错。
+    if quantity.is_empty() {
+        return Err("购物袋里读不到数量，无法确认只买 1 件，自动结账已停下".into());
+    }
+    if quantity != "1" {
         return Err(format!("购物袋里的数量是 {quantity}，自动结账只买 1 件"));
     }
     Ok(())
@@ -492,9 +497,55 @@ struct Flow<'a> {
     session: &'a mut ChromiumSession,
     plan: &'a CheckoutPlan,
     progress: &'a (dyn Fn(String) + Send + Sync),
+    /// 点击「立即下单」前的复核钩子，由宿主重新读取当前设置。
+    gate: Option<&'a dyn PlaceOrderGate>,
     /// 实际取货的门店。默认是到货的那一家，沿用结账页默认选中的门店时会变。
     store_number: String,
     store_title: String,
+}
+
+/// 点击「立即下单」之前的复核钩子。
+///
+/// 一次结账要跑一分钟以上，期间用户可能关掉自动结账、取消「自动提交订单」，
+/// 或者把目标商品从监控列表里删掉。启动时的设置快照到提交那一刻已经不算数，
+/// 所以每次点击前都让宿主重新读一遍当前设置。
+pub trait PlaceOrderGate: Send + Sync {
+    /// 返回 `Ok(true)` 才允许点击「立即下单」；`Ok(false)` 表示当前设置要求
+    /// 停在「查看订单」页；`Err` 表示必须中止整个流程。
+    fn allow_place_order(&self) -> Result<bool, String>;
+}
+
+/// 提交前的守卫结论。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaceOrderDecision {
+    Place,
+    StayAtReview,
+}
+
+/// 真正点击「立即下单」前必须经过这里。
+///
+/// 这里刻意不接受「启动时 `place_order` 是 true」当结论：`plan_allows` 只决定
+/// 要不要进入提交阶段，能不能点仍要由 `gate` 按当前设置回答。
+fn decide_place_order(
+    plan_allows: bool,
+    gate: Option<&dyn PlaceOrderGate>,
+) -> Result<PlaceOrderDecision, CheckoutError> {
+    if !plan_allows {
+        return Ok(PlaceOrderDecision::StayAtReview);
+    }
+    let Some(gate) = gate else {
+        // 没有复核就不提交。产品路径上 gate 一定存在；真走到这里说明装配
+        // 漏了，宁可停在查看订单页也不能盲目点下去。
+        return Err(CheckoutError::new(
+            Stage::Review,
+            "自动结账没有配置提交前复核，拒绝点击「立即下单」",
+        ));
+    };
+    match gate.allow_place_order() {
+        Ok(true) => Ok(PlaceOrderDecision::Place),
+        Ok(false) => Ok(PlaceOrderDecision::StayAtReview),
+        Err(message) => Err(CheckoutError::new(Stage::Review, message)),
+    }
 }
 
 impl Flow<'_> {
@@ -1168,11 +1219,16 @@ impl Flow<'_> {
             .await?;
         verify_items(&lines.items, &self.plan.product_name)
             .map_err(|message| CheckoutError::new(stage, message))?;
-        if !self.plan.place_order {
-            return Ok(CheckoutOutcome::ReachedReview {
-                store: self.store_title.clone(),
-                total: lines.total,
-            });
+        // 这里不能只看启动快照里的 `plan.place_order`：结账期间用户可能已经
+        // 关掉自动结账或取消自动提交。提交前重新问一次宿主。
+        match decide_place_order(self.plan.place_order, self.gate)? {
+            PlaceOrderDecision::StayAtReview => {
+                return Ok(CheckoutOutcome::ReachedReview {
+                    store: self.store_title.clone(),
+                    total: lines.total,
+                });
+            }
+            PlaceOrderDecision::Place => {}
         }
 
         self.report("自动结账：核对通过，提交订单");
@@ -1259,10 +1315,14 @@ impl CheckoutRunner {
     }
 
     /// 执行一次结账。已有结账在进行时直接返回错误，不排队。
+    ///
+    /// `gate` 在点击「立即下单」前被调用，用来按当前设置复核；试跑传 `None`
+    /// （试跑的 `place_order` 必须是 false，不会走到提交前复核）。
     pub async fn run(
         &self,
         plan: &CheckoutPlan,
         progress: &(dyn Fn(String) + Send + Sync),
+        gate: Option<&dyn PlaceOrderGate>,
     ) -> Result<CheckoutOutcome, CheckoutError> {
         let Ok(mut slot) = self.session.try_lock() else {
             return Err(CheckoutError::new(
@@ -1277,6 +1337,7 @@ impl CheckoutRunner {
             session,
             plan,
             progress,
+            gate,
             store_number: plan.store_number.clone(),
             store_title: plan.store_title.clone(),
         }
@@ -1290,7 +1351,12 @@ impl CheckoutRunner {
     }
 
     pub async fn shutdown(&self) {
-        self.session.lock().await.take();
+        // 结账进行中时不能干等：一轮结账可能要几分钟，退出会被挂住。
+        // 拿不到锁就直接走，残留的浏览器由下次启动回收（与退出清理超时
+        // 是同一套取舍）。
+        if let Ok(mut slot) = self.session.try_lock() {
+            slot.take();
+        }
     }
 }
 
@@ -1336,12 +1402,50 @@ mod tests {
             verify_items(&items, "iphone 18 Pro  256gb 冰川蓝色"),
             Ok(())
         );
-        // 查看订单页可能读不到数量下拉框。
+    }
+
+    #[test]
+    fn 读不到数量就不放行() {
+        // 之前这里默认按 1 件放行。数量控件不是 select、或页面文案不是中文时，
+        // 读不到数量恰恰意味着「无法确认」，不能当成「就是 1 件」。
         let unknown_quantity = [item("iPhone 18 Pro 256GB 冰川蓝色", "")];
+        let error = verify_items(&unknown_quantity, "iPhone 18 Pro 256GB 冰川蓝色")
+            .expect_err("读不到数量必须失败");
+        assert!(error.contains("读不到数量"), "{error}");
+    }
+
+    #[test]
+    fn 提交前复核能拦住已关闭的自动下单() {
+        struct Gate(Result<bool, &'static str>);
+        impl PlaceOrderGate for Gate {
+            fn allow_place_order(&self) -> Result<bool, String> {
+                self.0.map_err(str::to_string)
+            }
+        }
+
+        // 启动快照里就是 false：停在查看订单页，不去问宿主。
         assert_eq!(
-            verify_items(&unknown_quantity, "iPhone 18 Pro 256GB 冰川蓝色"),
-            Ok(())
+            decide_place_order(false, None).unwrap(),
+            PlaceOrderDecision::StayAtReview
         );
+        // 快照允许，但当前设置已经取消自动提交。
+        assert_eq!(
+            decide_place_order(true, Some(&Gate(Ok(false)))).unwrap(),
+            PlaceOrderDecision::StayAtReview
+        );
+        // 当前设置仍允许提交。
+        assert_eq!(
+            decide_place_order(true, Some(&Gate(Ok(true)))).unwrap(),
+            PlaceOrderDecision::Place
+        );
+        // 没有复核钩子就绝不提交。
+        let error = decide_place_order(true, None).expect_err("没有复核必须拒绝");
+        assert_eq!(error.stage, Stage::Review);
+        // 复核失败（例如目标商品已删除）会中止整个流程。
+        let error = decide_place_order(true, Some(&Gate(Err("目标商品已不在监控列表"))))
+            .expect_err("必须中止");
+        assert_eq!(error.stage, Stage::Review);
+        assert!(error.message.contains("目标商品"));
     }
 
     #[test]
@@ -1441,6 +1545,7 @@ mod tests {
             session: &mut session,
             plan: &plan,
             progress: &progress,
+            gate: None,
             store_number: plan.store_number.clone(),
             store_title: plan.store_title.clone(),
         }
@@ -1489,6 +1594,7 @@ mod tests {
             session: &mut session,
             plan: &plan,
             progress: &progress,
+            gate: None,
             store_number: plan.store_number.clone(),
             store_title: plan.store_title.clone(),
         };

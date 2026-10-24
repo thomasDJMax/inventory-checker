@@ -39,6 +39,9 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(25);
 const MIN_REQUEST_INTERVAL: Duration = Duration::from_secs(2);
 const DELIVERY_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 const EMPTY_DELIVERY_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+/// 送货缓存最多保留多少个「型号 × 地址」。过期项不能及时删除（刷新失败时还要
+/// 继续展示上次的日期），所以必须靠容量上限挡住无限增长。
+const MAX_DELIVERY_CACHE_ENTRIES: usize = 512;
 const MAX_RESPONSE_BYTES: usize = 4 << 20;
 const MAX_EXCEPTION_SUMMARY_CHARS: usize = 160;
 const CHROMIUM_PROFILE_DIR: &str = "chromium-profile-v1";
@@ -1136,6 +1139,31 @@ enum PickupScope {
     Nearby(String),
 }
 
+/// 一次取货请求的失败，附带失败发生的阶段。
+///
+/// 线路准备（Clash 控制接口、节点配置）失败时根本没向 Apple 发出请求，
+/// 不能据此判定浏览器会话失效 —— 否则同轮每个门店都会重启一次 Chromium。
+struct PickupFailure {
+    error: ApiError,
+    route_preparation: bool,
+}
+
+impl PickupFailure {
+    fn route(error: ApiError) -> Self {
+        Self {
+            error,
+            route_preparation: true,
+        }
+    }
+
+    fn session(error: ApiError) -> Self {
+        Self {
+            error,
+            route_preparation: false,
+        }
+    }
+}
+
 impl PickupScope {
     fn query_pair(&self) -> (&'static str, &str) {
         match self {
@@ -1161,15 +1189,26 @@ fn pickup_query_pairs(scope: &PickupScope, parts: &[String]) -> Vec<(String, Str
     pairs
 }
 
-/// 地点查询没有给出目标门店时，单店查询仍可能正常工作。
+/// 地点查询没有给出目标门店或目标型号时，单店查询仍可能正常工作。
 ///
-/// 只认三种明确的“地点无结果”，不能把限流、网络错误或任意结构变化都变成一次
-/// 额外请求，否则恰好会在 Apple 拒绝访问时加重请求突发。
-fn nearby_response_needs_store_fallback(payload: &BrowserPayload, store_number: &str) -> bool {
+/// 只认明确的「地点结果覆盖不到这家店」：没有门店、没有取货数据，或门店在
+/// 响应里却缺了本次要查的零件号。不能把限流、网络错误或任意结构变化都变成
+/// 一次额外请求，否则恰好会在 Apple 拒绝访问时加重请求突发。
+fn nearby_response_needs_store_fallback(
+    payload: &BrowserPayload,
+    store_number: &str,
+    parts: &[String],
+) -> bool {
     if payload.status != 200 {
         return false;
     }
     match parse_pickup_message(payload.body.as_bytes(), store_number) {
+        // 合并响应可能带了目标门店，却只返回它附近有货的那几个型号。目标型号
+        // 不在 map 里时不能当成「没货」或「下架」，否则这个型号每轮都停在
+        // 「未返回型号」，永远不会去单店补查。
+        Ok(availability) => parts
+            .iter()
+            .any(|part| !availability.parts.contains_key(part)),
         Err(ApiError::StorePickupUnavailable { .. } | ApiError::NoPickupData { .. }) => true,
         Err(ApiError::SchemaDrift { field, .. }) => field == "body.stores[].storeNumber",
         _ => false,
@@ -1307,6 +1346,22 @@ impl DeliveryCacheKey {
 struct CachedDelivery {
     fetched_at: Instant,
     info: ProductDelivery,
+}
+
+/// 按最旧优先把缓存压回 [`MAX_DELIVERY_CACHE_ENTRIES`]。
+fn trim_delivery_cache<K: std::hash::Hash + Eq + Clone>(cache: &mut HashMap<K, CachedDelivery>) {
+    if cache.len() <= MAX_DELIVERY_CACHE_ENTRIES {
+        return;
+    }
+    let mut by_age: Vec<(K, Instant)> = cache
+        .iter()
+        .map(|(key, entry)| (key.clone(), entry.fetched_at))
+        .collect();
+    by_age.sort_by_key(|(_, at)| *at);
+    let excess = cache.len() - MAX_DELIVERY_CACHE_ENTRIES;
+    for (key, _) in by_age.into_iter().take(excess) {
+        cache.remove(&key);
+    }
 }
 
 /// 按地区和地点合并普通商品型号。整组装入，避免把同一门店的原始批次拆散；
@@ -1532,6 +1587,7 @@ impl QueryState {
                     info,
                 },
             );
+            self.trim_delivery_caches();
             return;
         }
         self.empty_delivery_cache.remove(&key);
@@ -1542,6 +1598,17 @@ impl QueryState {
                 info,
             },
         );
+        self.trim_delivery_caches();
+    }
+
+    /// 把送货缓存压回容量上限。
+    ///
+    /// 不能像 `empty_delivery_cache` 那样按 TTL 清：过期的成功结果仍然有用，
+    /// 刷新失败时要继续显示上次的日期。这里只按容量淘汰最旧的条目，既保留
+    /// 「过期但可用」的语义，又不会让长期运行的缓存无限增长。
+    fn trim_delivery_caches(&mut self) {
+        trim_delivery_cache(&mut self.delivery_cache);
+        trim_delivery_cache(&mut self.empty_delivery_cache);
     }
 
     fn schedule_hint(&mut self, locales: &[String]) -> ScheduleHint {
@@ -1861,13 +1928,15 @@ impl QueryState {
         region: &'static Region,
         scope: &PickupScope,
         parts: &[String],
-    ) -> Result<BrowserPayload, ApiError> {
+    ) -> Result<BrowserPayload, PickupFailure> {
         // 每次重试都会让一个节点进入冷却或短暂跳过，节点数就是天然上限；
         // 再加一道保险，防止短暂跳过到期后在同一请求里无限循环。节点列表在
         // `prepare_route` 里才加载，上限必须在它之后按最新节点数计算。
         let mut attempts = 0usize;
         loop {
-            self.prepare_route(region).await?;
+            if let Err(error) = self.prepare_route(region).await {
+                return Err(PickupFailure::route(error));
+            }
             let result = {
                 let QueryState { session, gate, .. } = &mut *self;
                 session
@@ -1895,7 +1964,7 @@ impl QueryState {
             if switch && attempts < self.routes.routes().len().max(1) * 2 {
                 continue;
             }
-            return result;
+            return result.map_err(PickupFailure::session);
         }
     }
 
@@ -2122,7 +2191,11 @@ impl AppleChromiumFetcher {
                 .await;
             let payload = match fetched {
                 Ok(payload) => payload,
-                Err(error) => {
+                Err(failure) => {
+                    let PickupFailure {
+                        error,
+                        route_preparation,
+                    } = failure;
                     // CDP 断连、命令超时或页面执行失败后，不再缓存这个失效会话。
                     // 保留原错误交给引擎处理，后续查询才重建，不在失败请求内重试。
                     // Apple 的 HTTP 限流和库存数据仍走下面原有的分类逻辑。
@@ -2137,7 +2210,9 @@ impl AppleChromiumFetcher {
                             CyclePickupRejection::RateLimited(detail.clone()),
                         );
                     }
-                    if matches!(error, ApiError::Transport(_)) {
+                    // 线路准备失败说明请求根本没发出去，浏览器会话是好的；
+                    // 把它当成会话故障会让同轮每个门店都重启一次 Chromium。
+                    if matches!(error, ApiError::Transport(_)) && !route_preparation {
                         guard.session = None;
                     }
                     return Err(error);
@@ -2154,7 +2229,9 @@ impl AppleChromiumFetcher {
             }
             (payload, used_nearby_response)
         };
-        if used_nearby_response && nearby_response_needs_store_fallback(&payload, store_number) {
+        if used_nearby_response
+            && nearby_response_needs_store_fallback(&payload, store_number, &parts)
+        {
             // 地点搜索可能返回空门店、业务无结果，或只返回附近的有限门店。
             // 这些结果都不能代表目标门店不可查询，立即按门店编号补查。
             // 这份单店响应不能放进地点缓存，否则后续同城门店都会误用它。
@@ -2165,7 +2242,11 @@ impl AppleChromiumFetcher {
             let fallback = guard.fetch_pickup(region, &fallback_scope, &parts).await;
             payload = match fallback {
                 Ok(payload) => payload,
-                Err(error) => {
+                Err(failure) => {
+                    let PickupFailure {
+                        error,
+                        route_preparation,
+                    } = failure;
                     if let ApiError::Blocked(detail) = &error {
                         guard.reject_pickup_for_cycle(
                             region,
@@ -2177,7 +2258,7 @@ impl AppleChromiumFetcher {
                             CyclePickupRejection::RateLimited(detail.clone()),
                         );
                     }
-                    if matches!(error, ApiError::Transport(_)) {
+                    if matches!(error, ApiError::Transport(_)) && !route_preparation {
                         guard.session = None;
                     }
                     return Err(error);
@@ -2658,12 +2739,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn 合并响应缺型号不重复查询且新一轮重新规划() {
+    async fn 合并响应缺型号时单店补查且下一轮重新规划() {
         let (fetcher, peer, requests) = cdp_recorded_responses(vec![
+            // 地点合并请求带了 A、B，但目标门店只返回了 A。
             multi_pickup_response(&[
                 ("R678", &[("A", "available")]),
                 ("R683", &[("A", "unavailable")]),
             ]),
+            // 缺 B 时按门店编号补查。
+            pickup_response(&["R683"], "B", "unavailable"),
             pickup_response(&["R683"], "C", "unavailable"),
         ])
         .await;
@@ -2674,11 +2758,14 @@ mod tests {
         fetcher.plan_cycle(&[first.clone(), second.clone()]).await;
         fetcher.pickup(region, "R678", &first, None).await.unwrap();
         let result = fetcher.pickup(region, "R683", &second, None).await.unwrap();
-        assert!(
-            !result.parts.contains_key("B"),
-            "未返回的型号必须留给引擎标记未知"
+        // 不能把「合并响应里没有 B」当成 B 无货或下架，也不能就此结束：
+        // 单店补查之后必须拿到 B 的真实结论。
+        assert!(!result.parts["B"].availability.is_in_stock());
+        assert_eq!(
+            fetcher.cycle_stats().await.request_count,
+            2,
+            "一次地点合并请求加一次单店补查"
         );
-        assert_eq!(fetcher.cycle_stats().await.request_count, 1);
         fetcher.begin_cycle().await;
         fetcher.state.lock().await.gate.last_sent = None;
         let changed = vec![nearby_target("R683", "C")];
@@ -2689,8 +2776,8 @@ mod tests {
             .unwrap();
         assert!(!result.parts["C"].availability.is_in_stock());
         let requests = requests.lock().await;
-        assert_eq!(requests.len(), 2);
-        let pairs = sent_pairs(&requests[1]);
+        assert_eq!(requests.len(), 3);
+        let pairs = sent_pairs(&requests[2]);
         assert_eq!(
             pairs
                 .iter()
@@ -2761,6 +2848,46 @@ mod tests {
     }
 
     #[test]
+    fn 送货缓存超过容量时淘汰最旧条目() {
+        let now = Instant::now();
+        let mut cache: HashMap<DeliveryCacheKey, CachedDelivery> = HashMap::new();
+        for i in 0..=MAX_DELIVERY_CACHE_ENTRIES {
+            let key = DeliveryCacheKey {
+                locale: "zh_CN".into(),
+                part: format!("P{i}"),
+                kit: None,
+                companion: None,
+                location: DeliveryRegion {
+                    state: "上海".into(),
+                    city: "上海".into(),
+                    district: "黄浦区".into(),
+                },
+            };
+            // P0 最旧，P512 最新。
+            let age = (MAX_DELIVERY_CACHE_ENTRIES - i) as u64;
+            cache.insert(
+                key,
+                CachedDelivery {
+                    fetched_at: now - Duration::from_secs(age),
+                    info: ProductDelivery::default(),
+                },
+            );
+        }
+
+        trim_delivery_cache(&mut cache);
+
+        assert_eq!(cache.len(), MAX_DELIVERY_CACHE_ENTRIES);
+        assert!(
+            !cache.keys().any(|key| key.part == "P0"),
+            "最旧的缓存应先被淘汰"
+        );
+        assert!(
+            cache.keys().any(|key| key.part == "P512"),
+            "最新写入的缓存必须保留"
+        );
+    }
+
+    #[test]
     fn 只有明确的地点无结果才触发单店补查() {
         let business_error = BrowserPayload {
             status: 200,
@@ -2784,18 +2911,56 @@ mod tests {
             status: 541,
             body: String::new(),
         };
+        // 门店在响应里，但只返回了别的型号。目标型号缺失同样要补查。
+        let missing_part = BrowserPayload {
+            status: 200,
+            body: json!({"body":{"stores":[{
+                "storeNumber":"R793",
+                "partsAvailability":{"OTHER/A":{"partNumber":"OTHER/A","pickupDisplay":"available"}}
+            }]}})
+            .to_string(),
+        };
+        let parts = vec!["MG6X4CH/A".to_string()];
 
         assert!(nearby_response_needs_store_fallback(
             &business_error,
-            "R793"
+            "R793",
+            &parts
         ));
-        assert!(nearby_response_needs_store_fallback(&empty_stores, "R793"));
-        assert!(nearby_response_needs_store_fallback(&missing_store, "R793"));
+        assert!(nearby_response_needs_store_fallback(
+            &empty_stores,
+            "R793",
+            &parts
+        ));
+        assert!(nearby_response_needs_store_fallback(
+            &missing_store,
+            "R793",
+            &parts
+        ));
+        assert!(
+            nearby_response_needs_store_fallback(&missing_part, "R793", &parts),
+            "门店在响应里但缺目标型号时必须补查"
+        );
         assert!(!nearby_response_needs_store_fallback(
             &unrelated_error,
-            "R793"
+            "R793",
+            &parts
         ));
-        assert!(!nearby_response_needs_store_fallback(&blocked, "R793"));
+        assert!(!nearby_response_needs_store_fallback(
+            &blocked, "R793", &parts
+        ));
+        // 型号齐全时不能多打一次单店查询。
+        let complete = BrowserPayload {
+            status: 200,
+            body: json!({"body":{"stores":[{
+                "storeNumber":"R793",
+                "partsAvailability":{"MG6X4CH/A":{"partNumber":"MG6X4CH/A","pickupDisplay":"available"}}
+            }]}})
+            .to_string(),
+        };
+        assert!(!nearby_response_needs_store_fallback(
+            &complete, "R793", &parts
+        ));
     }
 
     #[tokio::test]
@@ -4809,6 +4974,38 @@ mod tests {
             .expect("坏节点应被跳过");
         assert_eq!(fetcher.state.lock().await.routes.active(), Some("日本01"));
         assert_eq!(log.lock().await.len(), 2, "一次切换加一次断开旧连接");
+    }
+
+    #[tokio::test]
+    async fn 线路准备失败不丢弃浏览器会话() {
+        let (clash, _log) = fake_clash(&["香港01"], "香港01").await;
+        let (fetcher, _peer) = cdp_responses(vec![]).await;
+        use_clash(&fetcher, clash).await;
+        {
+            let mut state = fetcher.state.lock().await;
+            let clash = state.network.clash.clone();
+            state.network = NetworkSettings {
+                mode: NetworkMode::Pinned,
+                clash,
+            };
+            state.network.clash.pinned_node = "不存在的节点".into();
+        }
+        let region = region_by_locale("zh_CN").unwrap();
+
+        fetcher.begin_cycle().await;
+        let error = fetcher
+            .pickup_message(region, "R390", &[test_target("MG6X4CH/A")], None)
+            .await
+            .expect_err("指定节点不存在时应当失败");
+        assert!(
+            matches!(&error, ApiError::Transport(detail) if detail.contains("指定节点")),
+            "{error:?}"
+        );
+        // 请求根本没发到 Apple，浏览器会话仍然可用，不能在这里清掉。
+        assert!(
+            fetcher.state.lock().await.session.is_some(),
+            "线路配置错误不能当成会话失效"
+        );
     }
 
     #[tokio::test]

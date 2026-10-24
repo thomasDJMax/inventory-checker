@@ -102,6 +102,8 @@ impl Server {
                     index
                 } else if path.ends_with("iphone-99-pro") {
                     r#"<script>productSelectionData: {"products":[{"partNumber":"FUTURE/A","familyType":"iphone99pro","dimensionCapacity":"256gb","dimensionColor":"black"}]}</script>"#
+                } else if path.ends_with("iphone-100-pro") {
+                    r#"<script>productSelectionData: {"products":[{"partNumber":"FUTURE2/A","familyType":"iphone100pro","dimensionCapacity":"512gb","dimensionColor":"blue"}]}</script>"#
                 } else {
                     "<html>No product data</html>"
                 };
@@ -172,7 +174,6 @@ async fn partial_refresh_reports_failure_but_installs_successful_new_page() {
         "<a href='/shop/buy-iphone/iphone-99-pro'>New</a><a href='/shop/buy-iphone/iphone-broken'>Broken</a>",
     );
     let catalog = Catalog::new();
-    let before = catalog.products("zh_CN").unwrap().len();
     match catalog
         .refresh_products(
             server.region(),
@@ -190,8 +191,61 @@ async fn partial_refresh_reports_failure_but_installs_successful_new_page() {
         }
         other => panic!("expected partial failure, got {other:?}"),
     }
+    // 成功抓到的页照常安装、照常可见。机型发现成功时当前集合以官网返回的页
+    // 为准，所以 mock 里没被发现的 iPhone 旧页会被过滤；其他品类不受影响。
     assert!(catalog.product_by_part("zh_CN", "FUTURE/A").is_some());
-    assert_eq!(catalog.products("zh_CN").unwrap().len(), before + 1);
+    assert!(
+        catalog
+            .products("zh_CN")
+            .unwrap()
+            .iter()
+            .any(|product| product.category == Category::Mac)
+    );
+}
+
+#[tokio::test]
+async fn 部分页失败时新安装的页不会被旧集合过滤() {
+    // 第一轮完整刷新把当前机型集合定成只有 iphone-99-pro。
+    let first = Server::new("<a href='/shop/buy-iphone/iphone-99-pro'>New</a>");
+    let catalog = Catalog::new();
+    catalog
+        .refresh_products(
+            first.region(),
+            Some(Category::Iphone),
+            &reqwest::Client::new(),
+        )
+        .await
+        .unwrap();
+    assert!(catalog.product_by_part("zh_CN", "FUTURE/A").is_some());
+
+    // 第二轮出现一个新页，同时另一个页抓取失败。
+    let second = Server::new(
+        "<a href='/shop/buy-iphone/iphone-99-pro'>Old</a>\
+         <a href='/shop/buy-iphone/iphone-100-pro'>New</a>\
+         <a href='/shop/buy-iphone/iphone-broken'>Broken</a>",
+    );
+    match catalog
+        .refresh_products(
+            second.region(),
+            Some(Category::Iphone),
+            &reqwest::Client::new(),
+        )
+        .await
+    {
+        Err(CatalogError::RefreshFailed { failures, .. }) => {
+            assert!(
+                failures
+                    .iter()
+                    .any(|failure| failure.contains("iphone-broken"))
+            )
+        }
+        other => panic!("应当报告部分页失败，实际是 {other:?}"),
+    }
+    // 新页已经成功抓取并安装，不能因为同品类另一页失败而被上一次的旧集合过滤掉。
+    assert!(
+        catalog.product_by_part("zh_CN", "FUTURE2/A").is_some(),
+        "成功安装的新页必须对新机型可见"
+    );
 }
 
 #[tokio::test]

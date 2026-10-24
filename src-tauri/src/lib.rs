@@ -8,11 +8,15 @@
 //! 提醒也刻意放在这一层而不是前端：托盘模式下窗口是隐藏的，WebView 可能被
 //! 系统节流甚至挂起，把「及时提醒」挂在一个会被挂起的执行环境上是不能接受的。
 
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use apw_core::catalog::Catalog;
-use apw_core::config::{ClashSettings, MIN_INTERVAL_SECONDS, OpenOnHit, Settings, SettingsStore};
+use apw_core::config::{
+    ClashSettings, MIN_INTERVAL_SECONDS, OpenOnHit, OrderGuard, OrderGuardEntry, Settings,
+    SettingsStore,
+};
 use apw_core::model::{Category, Product, REGIONS, Store, Target, region_by_locale};
 use apw_core::notify::{Bark, Multi, Notification, Notifier, Sound};
 use apw_core::watcher::{Event, TargetState, Watcher, WatcherConfig};
@@ -28,7 +32,7 @@ mod clash;
 mod route_pool;
 #[cfg(windows)]
 mod windows_chromium;
-use checkout::{CheckoutOutcome, CheckoutPlan, CheckoutRunner};
+use checkout::{CheckoutOutcome, CheckoutPlan, CheckoutRunner, PlaceOrderGate};
 use chromium_fetcher::AppleChromiumFetcher;
 
 /// 前端事件通道名。前端用 `listen("watcher://event", ...)` 订阅。
@@ -265,8 +269,42 @@ struct AppState {
     http: reqwest::Client,
     /// 设置的内存副本。有可用的持久化存储时，只在新设置成功落盘后更新。
     settings: RwLock<Settings>,
+    /// 串行化「落盘 → 换内存」这两步。见 [`AppState::put_settings`]。
+    settings_io: Mutex<()>,
     /// 为 `None` 表示配置不可持久化（目录不可写，或上次读取失败已放弃写盘）。
     store: Option<SettingsStore>,
+    /// 点击「立即下单」前写入的待确认标记。为 `None`（配置目录不可用）时，
+    /// 自动结账绝不允许提交订单。
+    order_guard: Option<OrderGuard>,
+    /// 复用的提示音实例。它缓存解码后的 PCM、音频设备和单槽播放互斥；
+    /// 每条通知都新建一个会让这些缓存全部失效。
+    sound: Sound,
+    /// 自动结账任务的 in-flight 标志。判断与占位是同一个原子操作，
+    /// 同一轮多个到货事件不会各自 spawn 一次结账。
+    checkout_in_flight: CheckoutInFlight,
+}
+
+/// 自动结账的 in-flight 标志。
+#[derive(Clone, Default)]
+struct CheckoutInFlight(Arc<AtomicBool>);
+
+impl CheckoutInFlight {
+    /// 占住一次结账机会；已经在跑时返回 `None`。
+    fn try_acquire(&self) -> Option<CheckoutInFlightGuard> {
+        self.0
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| CheckoutInFlightGuard(self.0.clone()))
+    }
+}
+
+/// in-flight 占用凭据，任务结束（包括提前返回）时自动归还。
+struct CheckoutInFlightGuard(Arc<AtomicBool>);
+
+impl Drop for CheckoutInFlightGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 impl AppState {
@@ -280,6 +318,9 @@ impl AppState {
     /// 先落盘再更新内存副本。否则 Windows 上文件被占用或权限异常时，
     /// 界面、监控引擎和下次启动读到的设置会变成三份不同的状态。
     fn put_settings(&self, next: Settings) -> Result<(), String> {
+        // 「落盘 → 换内存」必须整体串行。并发的两次保存交错时，内存里的副本
+        // 可能来自 A、磁盘上的来自 B，下次启动就变回另一份设置。
+        let _serial = self.settings_io.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(store) = &self.store {
             store.save(&next).map_err(|e| e.to_string())?;
         }
@@ -287,6 +328,25 @@ impl AppState {
         let mut guard = self.settings.write().unwrap_or_else(|e| e.into_inner());
         *guard = next;
         Ok(())
+    }
+
+    /// 立即关闭自动结账：**先改内存，再尽力落盘**。
+    ///
+    /// 顺序与 [`put_settings`](Self::put_settings) 相反，这是刻意的：写盘失败时
+    /// 也必须保证本进程不再自动下单。返回实际生效的设置副本和落盘错误；调用方
+    /// 不能把 `Some(error)` 理解成「开关还开着」。
+    fn disable_checkout(&self) -> (Settings, Option<String>) {
+        let _serial = self.settings_io.lock().unwrap_or_else(|e| e.into_inner());
+        let next = {
+            let mut guard = self.settings.write().unwrap_or_else(|e| e.into_inner());
+            guard.checkout.enabled = false;
+            guard.clone()
+        };
+        let error = self
+            .store
+            .as_ref()
+            .and_then(|store| store.save(&next).err().map(|e| e.to_string()));
+        (next, error)
     }
 }
 
@@ -745,6 +805,7 @@ async fn get_snapshot(state: tauri::State<'_, AppState>) -> Result<Vec<TargetSta
 
 #[tauri::command]
 async fn set_targets(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     targets: Vec<Target>,
 ) -> Result<Vec<TargetState>, String> {
@@ -755,6 +816,10 @@ async fn set_targets(
     state.catalog.hydrate_store_targets(&mut next.targets);
     state.catalog.attach_pickup_locations(&mut next.targets);
     state.put_settings(next.clone())?;
+    // normalize 可能清掉 `checkout.product` 并关掉自动结账（删掉的正好是
+    // 下单商品时）。这里只返回 TargetState，不把设置推给界面的话，界面上的
+    // 开关会继续显示开启，下一次保存又把它写回磁盘。
+    let _ = app.emit(SETTINGS_CHANNEL, &next);
     state.watcher.set_targets(next.targets).await;
     Ok(state.watcher.snapshot().await)
 }
@@ -907,20 +972,23 @@ async fn dispatch_notification(
     notification: Notification,
     bark_url: &str,
 ) -> Result<(), apw_core::notify::NotifyError> {
-    let settings = match app.try_state::<AppState>() {
-        Some(state) => state.settings_snapshot(),
-        None => return Ok(()),
+    let Some((settings, sound, http)) = app.try_state::<AppState>().map(|state| {
+        (
+            state.settings_snapshot(),
+            state.sound.clone(),
+            state.http.clone(),
+        )
+    }) else {
+        return Ok(());
     };
 
     let mut channels = Multi::new();
     if settings.sound_enabled {
-        channels.push(Sound::embedded());
+        // 复用 AppState 里的同一个 Sound：解码后的 PCM、音频设备和单槽播放
+        // 互斥都跟着它。每条通知新建实例等于把这些缓存全部丢掉。
+        channels.push(sound);
     }
     if !bark_url.trim().is_empty() {
-        let http = app
-            .try_state::<AppState>()
-            .map(|s| s.http.clone())
-            .unwrap_or_default();
         // Bark 每次现构造：地址是用户随时可改的设置项，缓存实例会在改完地址后
         // 继续往旧地址推。共享的 http 客户端一并传进去，连接池仍然复用。
         channels.push(Bark::new(bark_url.to_owned(), http));
@@ -978,7 +1046,7 @@ async fn test_checkout(
     let progress = move |message: String| {
         let _ = app.emit(NOTICE_CHANNEL, message);
     };
-    match state.checkout.run(&plan, &progress).await {
+    match state.checkout.run(&plan, &progress, None).await {
         Ok(CheckoutOutcome::ReachedReview { store, total }) => Ok(format!(
             "试跑完成：{store} {} 已到「查看订单」页（总计 {total}），没有提交订单。",
             target.product_name
@@ -990,11 +1058,116 @@ async fn test_checkout(
     }
 }
 
+/// 按当前设置判断是否仍可以为这个目标提交订单。
+///
+/// `Ok(false)` 表示当前设置要求停在「查看订单」页，但流程可以正常收尾；
+/// `Err` 表示必须中止：总开关关了，或要下单的商品已经不在监控列表里。
+fn checkout_still_allowed(settings: &Settings, target: &Target) -> Result<bool, String> {
+    if !settings.checkout.enabled {
+        return Err("自动结账已被关闭，没有点击「立即下单」".into());
+    }
+    // 商品被删掉、或自动结账改成别的商品时，`is_checkout_target` 会变假。
+    // 只核对它还不够：同型号换到别的门店监控、原来的门店目标被删掉时，
+    // 也应该按「目标已不存在」处理。
+    if !settings.is_checkout_target(target)
+        || !settings
+            .targets
+            .iter()
+            .any(|item| item.key() == target.key())
+    {
+        return Err("要下单的商品已不在监控列表或自动结账设置里，没有点击「立即下单」".into());
+    }
+    Ok(settings.checkout.place_order)
+}
+
+/// 关闭自动结账并把内存里的真实状态推给界面。
+///
+/// 返回设置是否成功落盘。内存里的开关无论如何都已经关闭；落盘失败时错误文案
+/// 必须说的是「本次运行已关闭」，而不是「已关闭」。
+fn force_close_checkout(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<AppState>() else {
+        return false;
+    };
+    let (next, error) = state.disable_checkout();
+    // 即使写盘失败也要推：界面上的开关必须和内存里的真实状态一致，否则用户
+    // 下一次保存又会把 enabled=true 写回磁盘。
+    let _ = app.emit(SETTINGS_CHANNEL, &next);
+    match error {
+        Some(err) => {
+            let _ = app.emit(
+                NOTICE_CHANNEL,
+                format!(
+                    "关闭自动结账后设置文件写入失败：{err}。本次运行已关闭自动结账，但重启后可能恢复开启。"
+                ),
+            );
+            false
+        }
+        None => {
+            // 只有「关闭」已经成功落盘，待确认订单标记才可以清除。否则必须
+            // 留着它，让下次启动继续把订单状态当成未知。
+            if let Some(guard) = &state.order_guard
+                && let Err(err) = guard.clear()
+            {
+                let _ = app.emit(
+                    NOTICE_CHANNEL,
+                    format!("待确认订单标记清除失败：{err}。下次启动会再次关闭自动结账。"),
+                );
+            }
+            true
+        }
+    }
+}
+
+/// 自动结账的提交前复核：重读当前设置，并在点击前写下待确认订单标记。
+struct LiveCheckoutGate {
+    app: AppHandle,
+    target: Target,
+}
+
+impl LiveCheckoutGate {
+    /// 无法记录待确认标记时：先关闭自动结账，再返回一句如实描述状态的错误。
+    fn fail_without_guard(&self, detail: String) -> String {
+        let persisted = force_close_checkout(&self.app);
+        let note = if persisted {
+            "自动结账已关闭"
+        } else {
+            "本次运行已关闭自动结账，但设置文件写入失败，重启后可能恢复开启"
+        };
+        format!("{detail}；{note}。")
+    }
+}
+
+impl PlaceOrderGate for LiveCheckoutGate {
+    fn allow_place_order(&self) -> Result<bool, String> {
+        let Some(state) = self.app.try_state::<AppState>() else {
+            return Err(self.fail_without_guard("应用状态不可用，没有点击「立即下单」".into()));
+        };
+        let current = state.settings_snapshot();
+        let allowed = checkout_still_allowed(&current, &self.target)?;
+        if !allowed {
+            return Ok(false);
+        }
+        let Some(guard) = state.order_guard.as_ref() else {
+            return Err(
+                self.fail_without_guard("无法定位待确认订单标记文件，没有点击「立即下单」".into())
+            );
+        };
+        // 先落标记再点按钮。点击之后、设置落盘之前崩溃时，下次启动靠这个
+        // 标记知道「订单状态未知」，默认禁止自动结账。
+        if let Err(err) = guard.arm(&OrderGuardEntry::new(&self.target)) {
+            return Err(self.fail_without_guard(format!(
+                "无法写入待确认订单标记（{err}），没有点击「立即下单」"
+            )));
+        }
+        Ok(true)
+    }
+}
+
 /// 到货后执行自动结账，并把结果通知用户。
 ///
 /// 无论停在「查看订单」页还是已提交订单，成功一次后都会关闭自动结账：再次到货
 /// 时重跑流程会打断用户正在看的页面，已下单时还会重复下单。
-async fn run_checkout_on_hit(app: AppHandle, target: Target) {
+async fn run_checkout_on_hit(app: AppHandle, target: Target, _claim: CheckoutInFlightGuard) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -1013,25 +1186,25 @@ async fn run_checkout_on_hit(app: AppHandle, target: Target) {
         &state.catalog,
         settings.checkout.place_order,
     );
+    let gate = LiveCheckoutGate {
+        app: app.clone(),
+        target: target.clone(),
+    };
     let progress = {
         let app = app.clone();
         move |message: String| {
             let _ = app.emit(NOTICE_CHANNEL, message);
         }
     };
-    let (title, body) = match state.checkout.run(&plan, &progress).await {
+    let (title, body) = match state.checkout.run(&plan, &progress, Some(&gate)).await {
         Ok(outcome) => {
-            let mut next = state.settings_snapshot();
-            next.checkout.enabled = false;
-            match state.put_settings(next.clone()) {
-                Ok(()) => {
-                    let _ = app.emit(SETTINGS_CHANNEL, &next);
-                }
-                Err(err) => {
-                    let _ = app.emit(NOTICE_CHANNEL, format!("关闭自动结账开关失败：{err}"));
-                }
-            }
-            match outcome {
+            let persisted = force_close_checkout(&app);
+            let suffix = if persisted {
+                ""
+            } else {
+                "（注意：自动结账已在本次运行关闭，但设置文件没能写入，重启后可能再次开启。）"
+            };
+            let (title, body) = match outcome {
                 CheckoutOutcome::ReachedReview { store, total } => (
                     "已到查看订单页",
                     format!(
@@ -1061,20 +1234,22 @@ async fn run_checkout_on_hit(app: AppHandle, target: Target) {
                         target.product_name
                     ),
                 ),
-            }
+            };
+            (title, format!("{body}{suffix}"))
         }
         Err(error) => {
             // 在「立即下单」这一步出错时，无法确定订单有没有生成。持续有货时下一轮
             // 还会触发结账，所以先把开关关掉，绝不能在这种状态下再点一次。
             if error.stage == checkout::Stage::PlaceOrder {
-                let mut next = state.settings_snapshot();
-                next.checkout.enabled = false;
-                if state.put_settings(next.clone()).is_ok() {
-                    let _ = app.emit(SETTINGS_CHANNEL, &next);
-                }
+                let persisted = force_close_checkout(&app);
+                let note = if persisted {
+                    "自动结账已关闭。"
+                } else {
+                    "本次运行已关闭自动结账，但设置文件没能写入，重启后可能再次开启。"
+                };
                 (
                     "提交订单时出错，请确认结果",
-                    format!("{error}。订单可能已经生成，请在下单浏览器里确认。自动结账已关闭。"),
+                    format!("{error}。订单可能已经生成，请在下单浏览器里确认。{note}"),
                 )
             } else {
                 (
@@ -1107,12 +1282,28 @@ async fn pump_events(app: AppHandle, mut events: tokio::sync::mpsc::Receiver<Eve
             // 浏览器，免得占住结账、让选定的那件到货时反而被挡在外面。
             // 持续有货时每一轮都会再收到到货事件；上一次结账还在进行就不再触发，
             // 否则每一轮都会多一条「已有结账在进行」的失败提醒。
-            let checkout_busy = app
-                .try_state::<AppState>()
-                .is_some_and(|s| s.checkout.is_busy());
-            if settings.checkout.enabled && settings.is_checkout_target(target) && !checkout_busy {
+            //
+            // in-flight 标志的判断与占位是同一个原子操作，因此同一轮里多个门店
+            // 同时有货也不会各自 spawn 一次、最后只得到一句「已有结账在进行」。
+            let checkout_claim = if settings.checkout.enabled && settings.is_checkout_target(target)
+            {
+                app.try_state::<AppState>().and_then(|s| {
+                    if s.checkout.is_busy() {
+                        None
+                    } else {
+                        s.checkout_in_flight.try_acquire()
+                    }
+                })
+            } else {
+                None
+            };
+            if let Some(claim) = checkout_claim {
                 // 结账要操作好几个页面，不能占住事件循环，否则后续提醒都会被拖住。
-                tauri::async_runtime::spawn(run_checkout_on_hit(app.clone(), target.clone()));
+                tauri::async_runtime::spawn(run_checkout_on_hit(
+                    app.clone(),
+                    target.clone(),
+                    claim,
+                ));
             }
             if settings.stop_on_hit {
                 // 放到独立任务里停：引擎可能正等着往这个事件通道里发下一条事件，
@@ -1120,9 +1311,8 @@ async fn pump_events(app: AppHandle, mut events: tokio::sync::mpsc::Receiver<Eve
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Some(state) = app.try_state::<AppState>()
-                        && state.watcher.is_running().await
+                        && state.watcher.stop_if_running().await
                     {
-                        state.watcher.stop().await;
                         let _ = app.emit(NOTICE_CHANNEL, "监控到有货，已按设置暂停监控。");
                     }
                 });
@@ -1226,9 +1416,12 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "quit" => {
                 // `app.exit()` 会立即结束事件循环，不能指望托管状态的析构顺序替
                 // Chromium 收尾。先停掉可能正在查询的一轮，再显式释放浏览器树。
+                // 结账或查询可能正占着会话不放，整段收尾必须有上限，不能点完
+                // 「退出」之后挂上几分钟。
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    release_browsers(&app).await;
+                    let _ =
+                        tokio::time::timeout(EXIT_CLEANUP_TIMEOUT, release_browsers(&app)).await;
                     app.exit(0);
                 });
             }
@@ -1325,6 +1518,50 @@ fn load_settings(notices: &mut Vec<String>) -> (Settings, Option<SettingsStore>)
     }
 }
 
+/// 启动时处理「待确认订单」标记。
+///
+/// 标记存在（或存在却读不出来）就意味着上次运行在点击「立即下单」前后中断，
+/// 订单是否成立无法确认。这里强制关闭自动结账；只有关闭结果已经成功落盘，
+/// 才清除标记，否则把它留给下一次启动，继续按状态未知处理。
+fn resolve_pending_order(
+    settings: &mut Settings,
+    store: Option<&SettingsStore>,
+    guard: &OrderGuard,
+    notices: &mut Vec<String>,
+) {
+    let detail = match guard.pending() {
+        Ok(None) => return,
+        Ok(Some(entry)) => format!(
+            "上次运行在提交订单前后中断（门店 {}，零件号 {}），订单状态未知",
+            entry.store_number, entry.part_number
+        ),
+        Err(error) => format!("订单状态标记无法读取（{error}），订单状态未知"),
+    };
+    // 不看设置文件里写的是什么：订单状态未知时，这一次启动不允许自动结账。
+    settings.checkout.enabled = false;
+    match store {
+        Some(store) => match store.save(settings) {
+            Ok(()) => {
+                if let Err(error) = guard.clear() {
+                    notices.push(format!(
+                        "已关闭自动结账，但待确认订单标记清除失败：{error}；下次启动会再次关闭"
+                    ));
+                }
+            }
+            Err(error) => notices.push(format!(
+                "已关闭自动结账，但结果没能保存：{error}；待确认订单标记已保留，下次启动仍会关闭"
+            )),
+        },
+        None => notices.push(
+            "已关闭自动结账，但设置本身不可持久化；待确认订单标记会保留，下次启动仍按未知处理"
+                .into(),
+        ),
+    }
+    notices.push(format!(
+        "{detail}。已关闭自动结账；请先在下单浏览器里确认订单，再重新开启。"
+    ));
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -1358,6 +1595,21 @@ pub fn run() {
             }
             catalog.attach_pickup_locations(&mut settings.targets);
 
+            // 提交订单前写下的待确认标记还在，说明上次运行在提交阶段中断了，
+            // 订单是否成立无法从本地得知。这种情况下本次启动必须禁止自动结账。
+            let order_guard = match OrderGuard::new() {
+                Ok(guard) => {
+                    resolve_pending_order(&mut settings, store.as_ref(), &guard, &mut notices);
+                    Some(guard)
+                }
+                Err(error) => {
+                    notices.push(format!(
+                        "无法定位订单状态标记文件，本次运行不会自动提交订单：{error}"
+                    ));
+                    None
+                }
+            };
+
             // 用 Watcher::new 而不是 Watcher::spawn：setup 回调跑在主线程上，
             // 并不处在 tokio 运行时上下文里，在这里 tokio::spawn 会 panic，
             // 而且因为发生在不可展开的回调中，进程会直接 abort。
@@ -1390,7 +1642,11 @@ pub fn run() {
                 catalog,
                 http: reqwest::Client::new(),
                 settings: RwLock::new(settings),
+                settings_io: Mutex::new(()),
                 store,
+                order_guard,
+                sound: Sound::embedded(),
+                checkout_in_flight: CheckoutInFlight::default(),
             });
 
             let handle: AppHandle = app.handle().clone();
@@ -1475,9 +1731,11 @@ async fn release_browsers(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        in_stock_notification_body, parse_delivery_localities, parse_watch_band_choices,
-        parse_watch_band_sizes,
+        CheckoutInFlight, checkout_still_allowed, in_stock_notification_body,
+        parse_delivery_localities, parse_watch_band_choices, parse_watch_band_sizes,
+        resolve_pending_order,
     };
+    use apw_core::config::{OrderGuard, OrderGuardEntry, Settings, SettingsStore};
     use apw_core::model::Target;
 
     #[test]
@@ -1527,5 +1785,124 @@ mod tests {
         let parsed = parse_watch_band_sizes(sizes.as_bytes()).expect("应当解析表带尺码");
         assert_eq!(parsed[0].text, "6");
         assert_eq!(parsed[0].part_number, "MKJP4FE/A");
+    }
+
+    fn 结账目标(part: &str) -> Target {
+        Target {
+            locale: "zh_CN".into(),
+            store_number: "R683".into(),
+            store_title: "上海-环球港".into(),
+            part_number: part.into(),
+            product_name: "iPhone 18 Pro 256GB 冰川蓝色".into(),
+            companion_part: None,
+            companion_name: None,
+            kit_part: None,
+            pickup_location: None,
+        }
+    }
+
+    #[test]
+    fn 提交前复核会拦住已关闭的开关和已删除的目标() {
+        let target = 结账目标("MG724CH/A");
+        let mut settings = Settings {
+            targets: vec![target.clone()],
+            ..Settings::default()
+        };
+        settings.checkout.enabled = true;
+        settings.checkout.place_order = true;
+        assert_eq!(checkout_still_allowed(&settings, &target), Ok(true));
+
+        // 总开关关了：必须中止。
+        let mut disabled = settings.clone();
+        disabled.checkout.enabled = false;
+        assert!(checkout_still_allowed(&disabled, &target).is_err());
+
+        // 只关了自动提交：停在查看订单页，流程本身可以收尾。
+        let mut review_only = settings.clone();
+        review_only.checkout.place_order = false;
+        assert_eq!(checkout_still_allowed(&review_only, &target), Ok(false));
+
+        // 目标商品被删掉：必须中止。
+        let mut removed = settings.clone();
+        removed.targets.clear();
+        assert!(checkout_still_allowed(&removed, &target).is_err());
+    }
+
+    #[test]
+    fn 待确认订单标记会让下次启动关闭自动结账() {
+        let dir = tempfile::tempdir().expect("创建临时目录");
+        let store = SettingsStore::at(dir.path().join("settings.v2.json"));
+        let guard = OrderGuard::at(dir.path().join("checkout-order-guard.json"));
+        let target = 结账目标("MG724CH/A");
+        guard
+            .arm(&OrderGuardEntry::new(&target))
+            .expect("写入待确认标记");
+
+        let mut settings = Settings {
+            targets: vec![target],
+            ..Settings::default()
+        };
+        settings.checkout.enabled = true;
+        let mut notices = Vec::new();
+        resolve_pending_order(&mut settings, Some(&store), &guard, &mut notices);
+
+        assert!(!settings.checkout.enabled, "启动时必须禁止自动结账");
+        assert!(!store.load().expect("读取设置").checkout.enabled);
+        assert_eq!(
+            guard.pending().expect("读取标记"),
+            None,
+            "关闭落盘后清除标记"
+        );
+        assert!(
+            notices.iter().any(|notice| notice.contains("订单状态未知")),
+            "必须告诉用户订单状态未知：{notices:?}"
+        );
+    }
+
+    #[test]
+    fn 损坏的待确认标记同样禁止自动结账() {
+        let dir = tempfile::tempdir().expect("创建临时目录");
+        let store = SettingsStore::at(dir.path().join("settings.v2.json"));
+        let guard_path = dir.path().join("checkout-order-guard.json");
+        std::fs::write(&guard_path, b"{not json").expect("写入损坏标记");
+        let guard = OrderGuard::at(guard_path);
+
+        let mut settings = Settings::default();
+        settings.checkout.enabled = true;
+        let mut notices = Vec::new();
+        resolve_pending_order(&mut settings, Some(&store), &guard, &mut notices);
+
+        assert!(!settings.checkout.enabled);
+        assert!(!store.load().expect("读取设置").checkout.enabled);
+        assert!(
+            notices.iter().any(|notice| notice.contains("无法读取")),
+            "{notices:?}"
+        );
+    }
+
+    #[test]
+    fn 设置不可持久化时待确认标记会留给下次启动() {
+        let dir = tempfile::tempdir().expect("创建临时目录");
+        let guard = OrderGuard::at(dir.path().join("checkout-order-guard.json"));
+        guard
+            .arm(&OrderGuardEntry::new(&结账目标("MG724CH/A")))
+            .expect("写入待确认标记");
+
+        let mut settings = Settings::default();
+        settings.checkout.enabled = true;
+        let mut notices = Vec::new();
+        resolve_pending_order(&mut settings, None, &guard, &mut notices);
+
+        assert!(!settings.checkout.enabled);
+        assert!(guard.pending().expect("读取标记").is_some(), "标记必须保留");
+    }
+
+    #[test]
+    fn 自动结账同一时间只能占位一次() {
+        let in_flight = CheckoutInFlight::default();
+        let first = in_flight.try_acquire().expect("第一次应当占住");
+        assert!(in_flight.try_acquire().is_none(), "同一时间不能重复占位");
+        drop(first);
+        assert!(in_flight.try_acquire().is_some(), "任务结束后应能再次占位");
     }
 }

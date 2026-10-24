@@ -294,6 +294,27 @@ async fn 用户可在保护冷却期间立即重试且不会被强制等待() {
     assert!(!watcher.retry_now().await, "暂停后不应擅自启动监控");
 }
 
+#[tokio::test]
+async fn 到货暂停只停当前会话且不会误停重新开始的监控() {
+    let fake =
+        FakeFetcher::new(|_, store, parts| Ok(ok_response(store, parts, Availability::OutOfStock)));
+    let (watcher, _rx) = Watcher::spawn(fake, fast_config());
+    watcher.set_targets(vec![target("R683", "MG724CH/A")]).await;
+
+    watcher.start().await;
+    assert!(watcher.is_running().await);
+    // 正在监控时暂停成功。
+    assert!(watcher.stop_if_running().await);
+    assert!(!watcher.is_running().await);
+    // 已经停了就不再报「停了一次」，更不会影响随后启动的新会话。
+    assert!(!watcher.stop_if_running().await);
+
+    watcher.start().await;
+    assert!(watcher.is_running().await);
+    assert!(watcher.stop_if_running().await);
+    assert!(!watcher.is_running().await);
+}
+
 #[tokio::test(start_paused = true)]
 async fn 读取状态与重复启动不会绕过查询间隔或保护冷却() {
     let fake = ProtectedFetcher {
