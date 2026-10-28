@@ -474,8 +474,15 @@ impl Settings {
             {
                 continue;
             }
-            if seen.insert(t.key()) {
-                kept.push(t.clone());
+            // 判断用 trim、写回也要用 trim。只判空不回写的话，「R683 」和
+            // 「R683」会被当成两个不同的目标绕过一起去重，而前者发到 Apple
+            // 的请求永远查不到东西。
+            let mut target = t.clone();
+            target.locale = target.locale.trim().to_string();
+            target.store_number = target.store_number.trim().to_string();
+            target.part_number = target.part_number.trim().to_string();
+            if seen.insert(target.key()) {
+                kept.push(target);
             }
         }
         self.targets = kept;
@@ -723,6 +730,115 @@ impl SettingsStore {
                 let legacy: LegacySettings = serde_json::from_slice(&data).ok()?;
                 Some(legacy.into_settings())
             })
+    }
+}
+
+/// 自动结账在点击「立即下单」之前写下的待确认标记文件名。
+///
+/// 刻意不放进 [`Settings`]：这是一次性的运行时状态，不是用户设置。加进 schema
+/// 要牵字段迁移、旧文件兼容和前端类型，而它只需要一个「上次提交之后没有正常
+/// 收尾」的明确信号。和设置文件放在同一目录，跟着配置目录的权限一起收紧。
+const ORDER_GUARD_FILE: &str = "checkout-order-guard.json";
+
+/// 标记文件的读取上限。正常内容只有一百多字节。
+const MAX_ORDER_GUARD_BYTES: usize = 64 * 1024;
+
+/// 一次「已经准备点击立即下单」的待确认记录。
+///
+/// 它出现在磁盘上就意味着：上一个进程在提交订单的阶段中断了，订单是否成立
+/// 无法从本地得知。启动时读到它必须按「订单状态未知」处理。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OrderGuardEntry {
+    /// 写下标记的 Unix 秒数，只用于给用户的说明。
+    pub at_seconds: u64,
+    pub store_number: String,
+    pub part_number: String,
+}
+
+impl OrderGuardEntry {
+    /// 为一条到货目标生成待确认记录。
+    pub fn new(target: &Target) -> Self {
+        Self {
+            at_seconds: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            store_number: target.store_number.clone(),
+            part_number: target.part_number.clone(),
+        }
+    }
+}
+
+/// 「订单状态未知」标记的读写。
+///
+/// 用独立文件而不是设置字段，就是为了在点击下单前用一次原子写把「可能已经
+/// 下单」这件事钉在磁盘上。写不进去时调用方必须放弃提交 —— 点了却记不下来，
+/// 崩溃后重启就再也无法知道订单是否成立。
+pub struct OrderGuard {
+    path: PathBuf,
+}
+
+impl OrderGuard {
+    /// 指向配置目录下的标记文件。只算路径，不碰磁盘。
+    pub fn new() -> Result<Self, ConfigError> {
+        let dir = dirs::config_dir().ok_or(ConfigError::NoConfigDir)?;
+        Ok(Self {
+            path: dir.join(APP_DIR).join(ORDER_GUARD_FILE),
+        })
+    }
+
+    /// 指向任意路径，供测试使用。
+    pub fn at(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// 读取待确认标记。
+    ///
+    /// `Ok(None)` 只表示「确实没有标记」。文件存在但读不出来（损坏、权限、
+    /// 超限）一律返回错误，调用方必须按「订单状态未知」处理，不能当成没有。
+    pub fn pending(&self) -> Result<Option<OrderGuardEntry>, ConfigError> {
+        let file = match File::open(&self.path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(source) => return Err(ConfigError::io("读取订单状态标记", &self.path, source)),
+        };
+        let data = read_capped(file, MAX_ORDER_GUARD_BYTES)
+            .map_err(|source| ConfigError::io("读取订单状态标记", &self.path, source))?
+            .ok_or_else(|| ConfigError::TooLarge {
+                path: self.path.clone(),
+                limit: MAX_ORDER_GUARD_BYTES,
+            })?;
+        serde_json::from_slice(&data)
+            .map(Some)
+            .map_err(|source| ConfigError::Malformed {
+                path: self.path.clone(),
+                source,
+            })
+    }
+
+    /// 在点击「立即下单」之前原子地写下标记。
+    pub fn arm(&self, entry: &OrderGuardEntry) -> Result<(), ConfigError> {
+        let data =
+            serde_json::to_vec_pretty(entry).map_err(|source| ConfigError::Encode { source })?;
+        // 与设置文件共用同一套「临时文件 + 刷盘 + rename」：任何时刻读到的
+        // 要么是完整的标记，要么是完整的旧内容，不会出现半截 JSON。
+        write_atomically(&self.path, &data)
+    }
+
+    /// 订单结果已经确认（通常是自动结账已成功关闭）后清除标记。
+    ///
+    /// 只有在关闭自动结账的结果已经成功落盘之后才允许调用；否则标记必须留下，
+    /// 让下次启动继续按「状态未知」处理。
+    pub fn clear(&self) -> Result<(), ConfigError> {
+        match fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(ConfigError::io("清除订单状态标记", &self.path, source)),
+        }
     }
 }
 
@@ -1056,6 +1172,23 @@ mod tests {
         assert_eq!(s.targets.len(), 2);
         assert_eq!(s.targets[0].store_number, "R683");
         assert_eq!(s.targets[1].store_number, "R448");
+    }
+
+    #[test]
+    fn 规范化写回目标字段的首尾空白() {
+        let mut padded = 目标(" R683 ", " MG724CH/A ");
+        padded.locale = " zh_CN ".into();
+        padded.store_title = "上海-环球港".into();
+        let mut s = Settings {
+            targets: vec![
+                padded,
+                // 去掉空白后与上一条完全相同，必须合并掉，而不是当成另一条目标。
+                目标("R683", "MG724CH/A"),
+            ],
+            ..Settings::default()
+        };
+        s.normalize();
+        assert_eq!(s.targets, vec![目标("R683", "MG724CH/A")]);
     }
 
     #[test]

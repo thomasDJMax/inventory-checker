@@ -174,6 +174,8 @@ enum Command {
     SetDeliveryRegion(Option<DeliveryRegion>),
     Start(oneshot::Sender<()>),
     Stop(oneshot::Sender<()>),
+    /// 仅在正在监控时停止；回复是否真的停了。
+    StopIfRunning(oneshot::Sender<bool>),
     RetryNow(oneshot::Sender<bool>),
     Snapshot(oneshot::Sender<Vec<TargetState>>),
     IsRunning(oneshot::Sender<bool>),
@@ -250,6 +252,19 @@ impl Watcher {
         if self.cmd.send(Command::Stop(tx)).await.is_ok() {
             let _ = rx.await;
         }
+    }
+
+    /// 只在正在监控时停止，返回是否真的停了。
+    ///
+    /// 「到货后暂停」不能写成「先 is_running、再 stop」：两步之间用户可能已经
+    /// 手动重新开始，后一步会把新会话误停。这里把判断和停止放进同一条引擎
+    /// 命令，引擎串行处理，中间没有可插入的窗口。
+    pub async fn stop_if_running(&self) -> bool {
+        let (tx, rx) = oneshot::channel();
+        if self.cmd.send(Command::StopIfRunning(tx)).await.is_err() {
+            return false;
+        }
+        rx.await.unwrap_or(false)
     }
 
     /// 用户主动要求立即查询。运行中返回 `true`，并唤醒当前轮次等待；暂停时
@@ -737,8 +752,12 @@ impl<F: Fetcher> Engine<F> {
                                 Command::SetDeliveryRegion(region) => {
                                     region != &self.config.delivery_region
                                 }
-                                Command::Stop(_) | Command::RetryNow(_) => true,
-                                Command::Start(_) | Command::Snapshot(_) | Command::IsRunning(_) => false,
+                                Command::Stop(_)
+                                | Command::StopIfRunning(_)
+                                | Command::RetryNow(_) => true,
+                                Command::Start(_)
+                                | Command::Snapshot(_)
+                                | Command::IsRunning(_) => false,
                             };
                             self.handle_command(cmd).await;
                             if start_next_cycle {
@@ -778,6 +797,13 @@ impl<F: Fetcher> Engine<F> {
             Command::Stop(reply) => {
                 self.set_running(false).await;
                 let _ = reply.send(());
+            }
+            Command::StopIfRunning(reply) => {
+                let stopped = self.running;
+                if stopped {
+                    self.set_running(false).await;
+                }
+                let _ = reply.send(stopped);
             }
             Command::RetryNow(reply) => {
                 let accepted = self.running;

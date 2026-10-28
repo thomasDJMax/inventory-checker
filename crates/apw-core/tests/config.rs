@@ -16,7 +16,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use apw_core::config::{
     CheckoutPayment, CheckoutSettings, ClashSettings, ConfigError, DEFAULT_INTERVAL_SECONDS,
-    MAX_SETTINGS_BYTES, NetworkMode, NetworkSettings, OpenOnHit, Settings, SettingsStore,
+    MAX_SETTINGS_BYTES, NetworkMode, NetworkSettings, OpenOnHit, OrderGuard, OrderGuardEntry,
+    Settings, SettingsStore,
 };
 use apw_core::model::Target;
 
@@ -848,4 +849,59 @@ fn 其他地区的监控项不会触发自动结账() {
     settings.normalize();
     assert_eq!(settings.checkout_product(), None);
     assert!(!settings.checkout.enabled);
+}
+
+#[test]
+fn 待确认订单标记可写可读可清除() {
+    let dir = 临时目录::new("order-guard");
+    let guard = OrderGuard::at(dir.join("checkout-order-guard.json"));
+    assert_eq!(guard.pending().expect("读取空标记"), None);
+
+    let entry = OrderGuardEntry {
+        at_seconds: 1_700_000_000,
+        store_number: "R683".into(),
+        part_number: "MG724CH/A".into(),
+    };
+    guard.arm(&entry).expect("写入标记");
+    assert_eq!(guard.pending().expect("读取标记"), Some(entry));
+    // 原子写不能留下临时文件。
+    assert_eq!(dir.条目名(), vec!["checkout-order-guard.json".to_string()]);
+
+    guard.clear().expect("清除标记");
+    assert_eq!(guard.pending().expect("清除后读取"), None);
+    // 重复清除不是错误：启动和结账结束都可能各清一次。
+    guard.clear().expect("重复清除");
+}
+
+#[test]
+fn 损坏的待确认订单标记按状态未知处理() {
+    let dir = 临时目录::new("order-guard-corrupt");
+    let path = dir.join("checkout-order-guard.json");
+    fs::write(&path, b"{not json").expect("写入损坏标记");
+    let guard = OrderGuard::at(path);
+    // 必须报错而不是返回 None：文件存在本身就说明「上次提交过」。
+    assert!(guard.pending().is_err());
+}
+
+#[test]
+fn 待确认订单标记写入失败会报错() {
+    let dir = 临时目录::new("order-guard-fail");
+    // 让标记路径被一个目录占住，rename 一定失败。
+    let path = dir.join("checkout-order-guard.json");
+    fs::create_dir_all(&path).expect("创建同名目录");
+    let guard = OrderGuard::at(path);
+    let entry = OrderGuardEntry {
+        at_seconds: 0,
+        store_number: "R683".into(),
+        part_number: "MG724CH/A".into(),
+    };
+    assert!(guard.arm(&entry).is_err());
+}
+
+#[test]
+fn 待确认订单记录带上门店和零件号() {
+    let entry = OrderGuardEntry::new(&目标("R683", "MG724CH/A"));
+    assert_eq!(entry.store_number, "R683");
+    assert_eq!(entry.part_number, "MG724CH/A");
+    assert!(entry.at_seconds > 0);
 }

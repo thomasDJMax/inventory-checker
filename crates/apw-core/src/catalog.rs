@@ -616,7 +616,6 @@ impl Catalog {
             .filter(|c| families.iter().any(|f| f.category == *c))
             .collect();
         for category in categories {
-            let failures_before = failures.len();
             let (slugs, discovered) =
                 match crate::apple_catalog::discover_families(http, region, category).await {
                     Ok(slugs) => (slugs, true),
@@ -659,7 +658,13 @@ impl Catalog {
                     Err(err) => failures.push(format!("{slug}：{err}")),
                 }
             }
-            if discovered && failures.len() == failures_before {
+            if discovered {
+                // 只要机型发现成功，就以它为准更新当前集合，**不因为同品类
+                // 某一页抓取失败而跳过**。跳过的话，本次成功安装的新页会被
+                // 上一次的旧集合过滤掉：新品页明明已经抓到，界面上却看不见。
+                //
+                // 失败页仍在 `slugs` 里，因此它的在线旧数据和内嵌兜底都还
+                // 在集合内，不会因为这次失败而消失。
                 self.set_current_families(region.locale, category, &slugs);
             }
         }
